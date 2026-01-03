@@ -17,6 +17,7 @@ const clamp3 = {
   WebkitLineClamp: 3,
   WebkitBoxOrient: "vertical",
   overflow: "hidden",
+  whiteSpace: "pre-line",
 };
 
 export function GroupCard({
@@ -33,7 +34,6 @@ export function GroupCard({
   const { t } = useTranslation();
   const [showMenu, setShowMenu] = useState(false);
 
-  // Check if current user is the post owner (leader of the group)
   const leaderId =
     post.group?.leader?.userId ||
     post.group?.leader?.id ||
@@ -44,7 +44,6 @@ export function GroupCard({
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-5 shadow-sm hover:shadow-md transition-shadow relative">
-      {/* Menu 3 chấm - chỉ hiển thị cho chủ post */}
       {isOwner && onEdit && onDelete && (
         <div className="absolute top-3 right-3 z-10">
           <button
@@ -96,7 +95,6 @@ export function GroupCard({
         style={{ paddingRight: isOwner ? "2.5rem" : "0" }}
       >
         <div className="space-y-2 flex-1">
-          {/* Title & Status */}
           <div className="flex items-start gap-2 md:gap-3 flex-wrap">
             <h3 className="text-lg md:text-xl font-semibold text-gray-900 cursor-pointer hover:text-primary transition-colors flex-1 min-w-0">
               {post.title}
@@ -114,7 +112,6 @@ export function GroupCard({
             )}
           </div>
 
-          {/* Author, Group, Date */}
           <div className="flex flex-wrap items-center gap-2 md:gap-4 text-xs md:text-sm text-gray-500">
             <div
               className="flex items-center gap-2 cursor-pointer hover:text-gray-700"
@@ -161,7 +158,6 @@ export function GroupCard({
         </div>
 
         <div className="flex md:flex-col gap-4 md:gap-0 md:text-right text-xs md:text-sm text-gray-600">
-          {/* Applications & Due Date */}
           <div className="flex items-center gap-1">
             <Eye className="w-3 h-3" />
             <span>
@@ -190,7 +186,6 @@ export function GroupCard({
 
       <div className="mt-4 space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Positions Needed */}
           <div className="text-xs font-semibold tracking-wide text-gray-800">
             {(t("positionsNeeded") || "Positions Needed") + ":"}
             <div className="mt-2 flex flex-wrap gap-2">
@@ -200,7 +195,6 @@ export function GroupCard({
             </div>
           </div>
 
-          {/* Major */}
           <div className="lg:ml-10 text-xs font-semibold tracking-wide text-gray-800">
             {(t("major") || "Major") + ":"}
             <div className="mt-2 text-gray-500">
@@ -211,7 +205,6 @@ export function GroupCard({
       </div>
 
       <div className="mt-4 space-y-4">
-        {/* Skills */}
         {toArraySkills(post).length > 0 && (
           <div className="text-xs font-semibold tracking-wide text-gray-800">
             {(t("requiredSkills") || "Required Skillss") + ":"}

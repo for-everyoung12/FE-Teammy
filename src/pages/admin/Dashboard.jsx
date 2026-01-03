@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Spin, notification, Tag } from "antd";
+import { Card, Spin, notification, Tag, Select } from "antd";
 import {
   UserOutlined,
   TeamOutlined,
@@ -19,23 +19,53 @@ import {
 } from "recharts";
 import { AdminService } from "../../services/admin.service";
 import { useTranslation } from "../../hook/useTranslation";
+import { SemesterService } from "../../services/semester.service";
+const { Option } = Select;
 
 const AdminDashboard = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
   const [majorsData, setMajorsData] = useState([]);
+  const [semesterList, setSemesterList] = useState([]);
+  const [selectedSemesterId, setSelectedSemesterId] = useState(null);
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchMajorsData();
+    fetchSemesters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchDashboardData = async () => {
+  useEffect(() => {
+    if (!selectedSemesterId) return;
+    fetchDashboardData(selectedSemesterId);
+    fetchMajorsData(selectedSemesterId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSemesterId]);
+
+  const fetchSemesters = async () => {
+    try {
+      const res = await SemesterService.list();
+      const payload = res?.data?.data || res?.data || [];
+      const list = Array.isArray(payload) ? payload : [];
+      setSemesterList(list);
+      const active = list.find((s) => s?.isActive);
+      setSelectedSemesterId(
+        active?.semesterId || list[0]?.semesterId || null
+      );
+    } catch {
+      notification.error({
+        message: t("error") || "Error",
+        description: "Failed to load semesters",
+      });
+    }
+  };
+
+  const fetchDashboardData = async (semesterId) => {
     try {
       setLoading(true);
-      const response = await AdminService.getDashboardStats();
+      const response = await AdminService.getDashboardStats({
+        semesterId,
+      });
       if (response?.data) setDashboardData(response.data);
     } catch {
       notification.error({
@@ -47,9 +77,12 @@ const AdminDashboard = () => {
     }
   };
 
-  const fetchMajorsData = async () => {
+  const fetchMajorsData = async (semesterId) => {
     try {
-      const response = await AdminService.getMajorStats(false);
+      const response = await AdminService.getMajorStats(
+        { semesterId },
+        false
+      );
       const stats = Array.isArray(response?.data) ? response.data : [];
 
       const chartData = stats
@@ -150,6 +183,18 @@ const AdminDashboard = () => {
             {t("dashboard") || "Dashboard"}
           </h1>
         </div>
+        <Select
+          value={selectedSemesterId}
+          onChange={(value) => setSelectedSemesterId(value)}
+          className="w-60"
+          placeholder={t("selectSemester") || "Select semester"}
+        >
+          {semesterList.map((s) => (
+            <Option key={s.semesterId} value={s.semesterId}>
+              {`${s.season || ""} ${s.year || ""}`.trim()}
+            </Option>
+          ))}
+        </Select>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">

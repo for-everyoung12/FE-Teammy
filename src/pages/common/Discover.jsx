@@ -9,6 +9,7 @@ import FilterSidebar from "../../components/common/discover/FilterSidebar";
 import ProjectCard from "../../components/common/discover/ProjectCard";
 import TopicDetailModal from "../../components/common/discover/TopicDetailModal";
 import { useTranslation } from "../../hook/useTranslation";
+import { useAuth } from "../../context/AuthContext";
 import { TopicService } from "../../services/topic.service";
 import { GroupService } from "../../services/group.service";
 import { AuthService } from "../../services/auth.service";
@@ -19,6 +20,7 @@ import { Sparkles } from "lucide-react";
 
 const Discover = () => {
   const { t } = useTranslation();
+  const { userInfo } = useAuth();
   const [projects, setProjects] = useState([]);
   const [aiSuggestedTopics, setAiSuggestedTopics] = useState([]);
   const [membership, setMembership] = useState({
@@ -139,7 +141,9 @@ const Discover = () => {
 
   const refetchTopics = useCallback(async () => {
     try {
-      const res = await TopicService.getTopics();
+      const semesterId = userInfo?.semester?.semesterId;
+      const params = semesterId ? { semesterId } : {};
+      const res = await TopicService.getTopics(params);
       const payload = res?.data ?? res;
       const list =
         (Array.isArray(payload) && payload) ||
@@ -152,7 +156,7 @@ const Discover = () => {
     } catch (err) {
       console.error("Failed to refetch topics:", err);
     }
-  }, [mapTopics]);
+  }, [mapTopics, userInfo]);
 
   const refetchAISuggestions = useCallback(async () => {
     if (!membership.groupId) {
@@ -160,7 +164,6 @@ const Discover = () => {
       return 0;
     }
 
-    // Don't fetch AI suggestions if group already has a topic
     const hasTopicId =
       myGroupDetails?.topicId != null &&
       String(myGroupDetails.topicId).trim() !== "";
@@ -253,8 +256,6 @@ const Discover = () => {
       aiSuggestionsFetchedRef.current = null;
       return;
     }
-
-    // Wait for group details to be loaded before deciding whether to fetch AI suggestions
     if (isLoadingGroupDetails) {
       return;
     }
@@ -308,7 +309,7 @@ const Discover = () => {
     myGroupDetails,
     isLoadingGroupDetails,
     refetchAISuggestions,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    t,
   ]);
 
   useEffect(() => {
@@ -329,9 +330,7 @@ const Discover = () => {
     return () => {
       mounted = false;
     };
-    // t is unstable and can trigger refetch loops; keep effect stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refetchTopics]);
+  }, [refetchTopics, t]);
 
   const aiTopicIds = useMemo(() => {
     return new Set(aiSuggestedTopics.map((t) => t.topicId).filter(Boolean));
@@ -677,7 +676,6 @@ const Discover = () => {
             });
 
             await refetchGroupData();
-            // Refresh topics data to show pending invitation status
             await Promise.all([refetchTopics(), refetchAISuggestions()]);
 
             notification.success({
@@ -769,4 +767,3 @@ const Discover = () => {
 };
 
 export default Discover;
-
