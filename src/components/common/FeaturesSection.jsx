@@ -53,7 +53,7 @@ const FeaturesSection = () => {
   ];
 
   return (
-    <section className="bg-white py-4">
+    <section className="bg-white">
       <div className="w-full h-full bg-gray-100 py-10">
         <div className="max-w-[98rem] mx-auto grid grid-cols-1 md:grid-cols-3 gap-20 text-center">
           {stats.map((item, idx) => (
@@ -68,25 +68,23 @@ const FeaturesSection = () => {
           ))}
         </div>
       </div>
-      {/* Section title */}
       <div className="text-center mb-5 py-10">
-        <h2 className="text-[40px] md:text-[48px] font-black mb-4"
+        <h2
+          className="text-[40px] md:text-[48px] font-black mb-4"
           style={{
-                background: "linear-gradient(90deg,#3182ED,#43D08A)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}>
+            background: "linear-gradient(90deg,#3182ED,#43D08A)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+          }}
+        >
           {t("featuresTitle") || "Key Features"}
         </h2>
-        <p className=" text-[16px]"
-        
-        >
+        <p className=" text-[16px]">
           {t("featuresSubtitle") ||
             "Everything you need to succeed in your capstone project."}
         </p>
       </div>
 
-      {/* Feature grid - 3 columns */}
       <div className="max-w-[80rem] mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 px-6">
         {features.map((feature, index) => {
           const IconComponent = feature.icon;
@@ -109,7 +107,6 @@ const FeaturesSection = () => {
         })}
       </div>
 
-      {/* How It Works */}
       <div className="max-w-6xl mx-auto mt-20 px-6 text-center">
         <h2 className="text-3xl md:text-4xl font-bold text-[#1a1a1a]">
           {t("howItWorks") || "How It Works"}
@@ -172,7 +169,6 @@ const FeaturesSection = () => {
         </div>
       </div>
 
-      {/* CTA Section with gradient */}
       <div
         className="mt-20 py-16 px-6 text-center text-white"
         style={{
@@ -187,7 +183,6 @@ const FeaturesSection = () => {
             "Join a vibrant student community to find teammates, mentors, and growth opportunities—today."}
         </p>
 
-        {/* Benefits checklist */}
         <div className="flex flex-wrap justify-center gap-8 text-sm md:text-base">
           {[
             "ctaBenefitFree",

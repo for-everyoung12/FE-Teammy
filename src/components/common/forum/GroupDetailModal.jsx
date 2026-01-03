@@ -3,12 +3,6 @@ import { Modal } from "antd";
 import { Users, Shield } from "lucide-react";
 import { PostService } from "../../../services/post.service";
 import { useTranslation } from "../../../hook/useTranslation";
-const clamp3 = {
-  display: "-webkit-box",
-  WebkitLineClamp: 3,
-  WebkitBoxOrient: "vertical",
-  overflow: "hidden",
-};
 
 function Row({ label, children }) {
   return (
@@ -54,7 +48,9 @@ const GroupDetailModal = ({
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [group, setGroup] = useState(null);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const lastFetchedGroupRef = useRef(null);
+  const descriptionRef = useRef(null);
 
   useEffect(() => {
     if (!isOpen || !groupId) {
@@ -100,6 +96,10 @@ const GroupDetailModal = ({
     ...(group?.group?.members || []),
   ];
 
+  const description = group?.description || group?.group?.description || "";
+  const isLongDescription =
+    description.split("\n").length > 3 || description.length > 200;
+
   return (
     <Modal
       open={isOpen}
@@ -128,12 +128,67 @@ const GroupDetailModal = ({
               <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-gray-800">
                 {t("descriptionPost") || "Description post"}
               </div>
-              <div
-                className="text-sm text-gray-700 whitespace-pre-wrap"
-                style={clamp3}
-                title={group.description || group.group?.description || ""}
-              >
-                {group.description || group.group?.description || "—"}
+              <div className="text-sm text-gray-700">
+                <div
+                  ref={descriptionRef}
+                  className="whitespace-pre-line"
+                  style={
+                    !isDescriptionExpanded && isLongDescription
+                      ? {
+                          display: "-webkit-box",
+                          WebkitLineClamp: 3,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }
+                      : {}
+                  }
+                >
+                  {description || "—"}
+                </div>
+                {isLongDescription && (
+                  <button
+                    onClick={() =>
+                      setIsDescriptionExpanded(!isDescriptionExpanded)
+                    }
+                    className="mt-2 text-[12px] font-semibold text-black flex items-center gap-1"
+                  >
+                    {isDescriptionExpanded ? (
+                      <>
+                        <span>{t("showLess") || "Show less"}</span>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1}
+                            d="M5 15l7-7 7 7"
+                          />
+                        </svg>
+                      </>
+                    ) : (
+                      <>
+                        <span>{t("showMore") || "Show more"}</span>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 9l-7 7-7-7"
+                          />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -142,11 +197,11 @@ const GroupDetailModal = ({
                 <Row label={t("major") || "Major"}>
                   {group.major?.majorName || "—"}
                 </Row>
-                <Row label={t("position") || "Position Needed"}>
+                <Row label={t("positionNeeded") || "Position Needed"}>
                   {group.position_needed || group.positionNeeded || "—"}
                 </Row>
                 {group.skills && group.skills.length > 0 && (
-                  <Row label={t("skills") || "Skills"}>
+                  <Row label={t("requiredSkills") || "Skills"}>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {group.skills.map((skill, idx) => (
                         <span
