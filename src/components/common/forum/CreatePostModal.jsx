@@ -335,7 +335,7 @@ const CreatePostModal = ({ isOpen, closeModal, onCreated, defaultGroupId }) => {
           />
         </Form.Item>
         <Form.Item
-          label={t("pleaseSelectDeadline") ? t("expiresAt") : "Expires At"}
+          label={t("placeholderExpiresAt") ? t("expiresAt") : "Expires At"}
           name="expiresAt"
           rules={[
             {
@@ -358,7 +358,7 @@ const CreatePostModal = ({ isOpen, closeModal, onCreated, defaultGroupId }) => {
             disabledDate={(current) =>
               current && current < dayjs().endOf("day")
             }
-            placeholder="Chọn ngày hết hạn"
+            placeholder={t("placeholderExpiresAt") || "Chọn ngày hết hạn"}
           />
         </Form.Item>
         <Form.Item
@@ -509,4 +509,3 @@ const CreatePostModal = ({ isOpen, closeModal, onCreated, defaultGroupId }) => {
 };
 
 export default CreatePostModal;
-

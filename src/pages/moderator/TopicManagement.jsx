@@ -328,7 +328,7 @@ const TopicManagement = () => {
             columns={columns}
             dataSource={filteredData}
             loading={loading}
-            pagination={{ pageSize: 5 }}
+            pagination={{ pageSize: 8 }}
             bordered
             scroll={{ x: "max-content" }}
             className="rounded-lg"
@@ -359,4 +359,3 @@ const TopicManagement = () => {
 };
 
 export default TopicManagement;
-

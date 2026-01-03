@@ -73,9 +73,10 @@ export const AdminService = {
     });
   },
 
-  getDashboardStats(isLoading = true) {
+  getDashboardStats(params = {}, isLoading = true) {
     return BaseService.get({
       url: API.ADMIN.DASHBOARD,
+      params,
       isLoading,
     });
   },
@@ -86,9 +87,10 @@ export const AdminService = {
       isLoading,
     });
   },
-  getMajorStats(isLoading = true) {
+  getMajorStats(params = {}, isLoading = true) {
     return BaseService.get({
       url: API.ADMIN.MAJOR_STATS,
+      params,
       isLoading,
     });
   },

@@ -1,9 +1,10 @@
 import { createContext, useState, useContext, useEffect } from "react";
 import { AuthService } from "../services/auth.service";
-import { connectGroupStatusHub, disconnectGroupStatusHub } from "../services/groupStatusHub";
+import {
+  connectGroupStatusHub,
+  disconnectGroupStatusHub,
+} from "../services/groupStatusHub";
 import { HttpException } from "../app/toastException/http.exception";
-// import { toast } from "react-toastify";
-// HTTP status codes
 const HTTP_STATUS = {
   BADREQUEST: 400,
   UNAUTHORIZED: 401,
@@ -12,7 +13,6 @@ const HTTP_STATUS = {
 
 const AuthContext = createContext(undefined);
 
-// Ensure a consistent user shape across the app
 const normalizeUserInfo = (raw) => {
   if (!raw || typeof raw !== "object") return null;
   return {
@@ -30,6 +30,7 @@ const normalizeUserInfo = (raw) => {
     role: raw.role,
     emailVerified: !!raw.emailVerified,
     skillsCompleted: !!raw.skillsCompleted,
+    semester: raw.semester || null,
   };
 };
 
@@ -50,8 +51,7 @@ export const AuthProvider = ({ children }) => {
       if (!storedUserInfo) return null;
       const parsed = JSON.parse(storedUserInfo);
       return normalizeUserInfo(parsed);
-    } catch (error) {
-
+    } catch {
       return null;
     }
   });
@@ -65,8 +65,8 @@ export const AuthProvider = ({ children }) => {
       } else {
         localStorage.removeItem("userInfo");
       }
-    } catch (error) {
-
+    } catch {
+      /* empty */
     }
   }, [userInfo]);
 
@@ -83,7 +83,6 @@ export const AuthProvider = ({ children }) => {
 
       return user;
     } catch (error) {
-
       throw error instanceof HttpException
         ? error
         : new HttpException(
@@ -132,7 +131,6 @@ export const AuthProvider = ({ children }) => {
 
       return normalized;
     } catch (error) {
-
       throw error instanceof HttpException
         ? error
         : new HttpException(
@@ -159,12 +157,13 @@ export const AuthProvider = ({ children }) => {
     if (!token) return;
     connectGroupStatusHub(token)
       .then(() => {
-        console.log("[AuthContext] GroupStatus hub connected (rehydrated token)");
+        console.log(
+          "[AuthContext] GroupStatus hub connected (rehydrated token)"
+        );
       })
       .catch((err) => {
         console.warn("[AuthContext] Failed to reconnect GroupStatus hub", err);
       });
-    // No cleanup here because logout already disconnects; this avoids duplicate stop/start churn.
   }, [token]);
 
   return (
@@ -180,8 +179,6 @@ export const AuthProvider = ({ children }) => {
         setIsLoading,
         handleLogin,
         logout,
-        // forgotPassword,
-        // getCurrentUser,
         loginGoogle,
         notifications,
         setNotifications,
@@ -204,4 +201,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

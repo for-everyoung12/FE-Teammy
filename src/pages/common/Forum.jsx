@@ -52,7 +52,14 @@ const Forum = () => {
   const [isEditRecruitmentPostModalOpen, setIsEditRecruitmentPostModalOpen] =
     useState(false);
   const [editingPost, setEditingPost] = useState(null);
-  const savedUser = JSON.parse(localStorage.getItem("userInfo") || "{}");
+  const savedUser = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("userInfo") || "{}");
+    } catch {
+      return {};
+    }
+  }, []);
+  const majorId = userInfo?.majorId ?? savedUser?.majorId;
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const timer = useRef(null);
@@ -175,47 +182,70 @@ const Forum = () => {
     })();
   }, []);
 
+  const loadAllPosts = useCallback(
+    async (
+      { showError = false, shouldUpdate = () => true, setLoading = true } = {}
+    ) => {
+      try {
+        if (setLoading && shouldUpdate()) setIsLoadingPosts(true);
+        const [groupRes, individualRes] = await Promise.all([
+          PostService.getRecruitmentPosts(),
+          PostService.getPersonalPosts(),
+        ]);
+
+        const groupArr = toArraySafe(groupRes).filter(
+          (x) => x?.type === "group_hiring"
+        );
+        const individualArr = toArraySafe(individualRes).filter(
+          (x) => x?.type === "individual"
+        );
+
+        if (!shouldUpdate()) return;
+
+        setAllPostsData([...groupArr, ...individualArr]);
+      } catch {
+        if (showError && shouldUpdate()) {
+          notification.error({
+            message: t("error") || "Error",
+            description: t("failedToFetchPosts") || "Failed to fetch posts",
+            placement: "topRight",
+            duration: 3,
+          });
+        }
+      } finally {
+        if (setLoading && shouldUpdate()) setIsLoadingPosts(false);
+      }
+    },
+    [t]
+  );
+
   useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (q) return;
+
+    setUseServerSearch(false);
+    let mounted = true;
+
+    loadAllPosts({ shouldUpdate: () => mounted });
+
+    return () => {
+      mounted = false;
+    };
+  }, [debouncedQuery, loadAllPosts]);
+
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (!q) return;
+
     let mounted = true;
 
     (async () => {
-      const q = debouncedQuery.trim();
-
-      if (!q) {
-        setUseServerSearch(false);
-
-        try {
-          setIsLoadingPosts(true);
-          const [groupRes, individualRes] = await Promise.all([
-            PostService.getRecruitmentPosts(),
-            PostService.getPersonalPosts(),
-          ]);
-
-          const groupArr = toArraySafe(groupRes).filter(
-            (x) => x?.type === "group_hiring"
-          );
-          const individualArr = toArraySafe(individualRes).filter(
-            (x) => x?.type === "individual"
-          );
-
-          if (!mounted) return;
-
-          setAllPostsData([...groupArr, ...individualArr]);
-          setPostsData(activeTab === "groups" ? groupArr : individualArr);
-        } catch {
-          // Ignore error
-        } finally {
-          if (mounted) setIsLoadingPosts(false);
-        }
-        return;
-      }
-
       try {
-        setIsLoadingPosts(true);
+        if (mounted) setIsLoadingPosts(true);
 
         const params = {
           skills: normalizeSkills(q),
-          majorId: savedUser?.majorId || undefined,
+          majorId: majorId ?? undefined,
         };
 
         const res =
@@ -247,7 +277,7 @@ const Forum = () => {
     return () => {
       mounted = false;
     };
-  }, [debouncedQuery, activeTab, savedUser?.majorId]);
+  }, [debouncedQuery, activeTab, majorId]);
 
   /** 3) Khi activeTab thay đổi, CHỈ filter data từ allPostsData nếu KHÔNG đang search */
   useEffect(() => {
@@ -364,7 +394,7 @@ const Forum = () => {
       return;
     }
 
-    if (activeTab !== "groups" || !savedUser?.majorId) {
+    if (activeTab !== "groups" || majorId == null) {
       aiGroupsFetchedKeyRef.current = null;
       aiGroupsNotificationShownRef.current = false;
       setAiSuggestedGroupPosts([]);
@@ -380,7 +410,7 @@ const Forum = () => {
       return;
     }
 
-    const key = `groups-${savedUser.majorId}`;
+    const key = `groups-${majorId}`;
     if (aiGroupsFetchedKeyRef.current === key) {
       return;
     }
@@ -391,7 +421,7 @@ const Forum = () => {
       try {
         setIsLoadingAIGroups(true);
         const aiResponse = await AiService.getRecruitmentPostSuggestions({
-          majorId: savedUser.majorId,
+          majorId,
           limit: 10,
         });
 
@@ -438,32 +468,11 @@ const Forum = () => {
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, savedUser?.majorId, membership.hasGroup, membershipLoaded]);
+  }, [activeTab, majorId, membership.hasGroup, membershipLoaded]);
 
-  const handleCreated = async () => {
-    try {
-      const [groupRes, individualRes] = await Promise.all([
-        PostService.getRecruitmentPosts(),
-        PostService.getPersonalPosts(),
-      ]);
-      const groupArr = toArraySafe(groupRes).filter(
-        (x) => x?.type === "group_hiring"
-      );
-      const individualArr = toArraySafe(individualRes).filter(
-        (x) => x?.type === "individual"
-      );
-
-      setAllPostsData([...groupArr, ...individualArr]);
-      setPostsData(activeTab === "groups" ? groupArr : individualArr);
-    } catch {
-      notification.error({
-        message: t("error") || "Error",
-        description: t("failedToFetchPosts") || "Failed to fetch posts",
-        placement: "topRight",
-        duration: 3,
-      });
-    }
-  };
+  const handleCreated = useCallback(async () => {
+    await loadAllPosts({ showError: true, setLoading: false });
+  }, [loadAllPosts]);
 
   const aiGroupPostIds = useMemo(() => {
     return new Set(
@@ -476,6 +485,39 @@ const Forum = () => {
       aiSuggestedPosts.map((item) => item.profilePost?.id).filter(Boolean)
     );
   }, [aiSuggestedPosts]);
+
+  const searchIndex = useMemo(() => {
+    if (useServerSearch) return new Map();
+
+    const index = new Map();
+
+    (postsData || []).forEach((item) => {
+      const texts = [
+        item?.title,
+        item?.description,
+        item?.groupName,
+        item?.group?.name,
+        item?.userDisplayName,
+        item?.group?.leader?.displayName,
+        item?.leader?.displayName,
+        item?.owner?.displayName,
+        item?.major?.majorName,
+        item?.majorName,
+        item?.topic?.name,
+        item?.topicName,
+        item?.skills ? String(item.skills) : "",
+        item?.positionNeeded ?? item?.position_needed ?? "",
+      ]
+        .filter(Boolean)
+        .map((s) => String(s).toLowerCase())
+        .join(" ");
+
+      const key = item?.id ?? item;
+      index.set(key, texts);
+    });
+
+    return index;
+  }, [postsData, useServerSearch]);
 
   const filtered = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
@@ -490,26 +532,8 @@ const Forum = () => {
 
       if (useServerSearch) return true;
 
-      const texts = [
-        item.title,
-        item.description,
-        item.groupName,
-        item.group?.name,
-        item.userDisplayName,
-        item.group?.leader?.displayName,
-        item.leader?.displayName,
-        item.owner?.displayName,
-        item.major?.majorName,
-        item.majorName,
-        item.topic?.name,
-        item.topicName,
-        String(item.skills || ""),
-        String(item.positionNeeded ?? item.position_needed ?? ""),
-      ]
-        .filter(Boolean)
-        .map((s) => String(s).toLowerCase());
-
-      return !q || texts.some((h) => h.includes(q));
+      const searchText = searchIndex.get(item?.id ?? item) || "";
+      return !q || searchText.includes(q);
     });
   }, [
     postsData,
@@ -518,6 +542,7 @@ const Forum = () => {
     aiGroupPostIds,
     aiProfilePostIds,
     useServerSearch,
+    searchIndex,
   ]);
 
   useEffect(() => {
@@ -529,21 +554,23 @@ const Forum = () => {
   const end = start + pageSize;
   const paged = filtered.slice(start, end);
 
-  const openGroupPosts = useMemo(() => {
-    return (allPostsData || []).filter(
-      (item) =>
-        item?.type === "group_hiring" &&
-        (item?.status || "").toString().toLowerCase() === "open"
-    ).length;
+  const openCounts = useMemo(() => {
+    return (allPostsData || []).reduce(
+      (acc, item) => {
+        const statusStr = (item?.status || "").toString().toLowerCase();
+        if (statusStr !== "open") return acc;
+
+        if (item?.type === "group_hiring") acc.groups += 1;
+        if (item?.type === "individual") acc.individuals += 1;
+
+        return acc;
+      },
+      { groups: 0, individuals: 0 }
+    );
   }, [allPostsData]);
 
-  const openIndividualPosts = useMemo(() => {
-    return (allPostsData || []).filter(
-      (item) =>
-        item?.type === "individual" &&
-        (item?.status || "").toString().toLowerCase() === "open"
-    ).length;
-  }, [allPostsData]);
+  const { groups: openGroupPosts, individuals: openIndividualPosts } =
+    openCounts;
 
   const onClickOpenApply = (post) => {
     if (!post?.id) return;

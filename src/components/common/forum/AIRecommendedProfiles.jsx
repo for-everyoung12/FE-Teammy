@@ -10,6 +10,7 @@ const clamp3 = {
   WebkitLineClamp: 3,
   WebkitBoxOrient: "vertical",
   overflow: "hidden",
+  whiteSpace: "pre-line",
 };
 
 export function AIRecommendedProfiles({
