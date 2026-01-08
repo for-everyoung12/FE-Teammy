@@ -217,7 +217,11 @@ const TaskCard = ({ task, onOpen, onDelete, columnMeta = {} }) => {
       {/* Status tag */}
       <div className="flex items-center gap-2 mb-3">
         <span className={`text-xs px-2 py-1 rounded-full ${statusClass}`}>
-          {formatColumnName(columnMeta[task.status]?.title || task.status)}
+          {formatColumnName(
+            columnMeta[task.columnId]?.title ||
+              columnMeta[task.status]?.title ||
+              task.status
+          )}
         </span>
       </div>
 

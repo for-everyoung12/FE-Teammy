@@ -23,7 +23,6 @@ import { Modal, Form, Input, InputNumber, message, notification, DatePicker, But
 import dayjs from "dayjs";
 import TaskModal from "../../components/common/kanban/TaskModal";
 import useKanbanBoard from "../../hook/useKanbanBoard";
-import { filterColumns } from "../../utils/kanbanUtils";
 import SidebarNavigation from "../../components/common/my-group/SidebarNavigation";
 import OverviewSection from "../../components/common/my-group/OverviewSection";
 import MembersPanel from "../../components/common/my-group/MembersPanel";
@@ -35,6 +34,7 @@ import BacklogTab from "../../components/common/workspace/BacklogTab";
 import MilestonesTab from "../../components/common/workspace/MilestonesTab";
 import ReportsTab from "../../components/common/workspace/ReportsTab";
 import ListView from "../../components/common/workspace/ListView";
+import { Pagination } from "../../components/common/forum/Pagination";
 import { useGroupActivation } from "../../hook/useGroupActivation";
 import { useGroupDetail } from "../../hook/useGroupDetail";
 import { useGroupEditForm } from "../../hook/useGroupEditForm";
@@ -69,6 +69,13 @@ export default function MyGroup() {
   const [activeTab, setActiveTab] = useState("overview");
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState("kanban");
   const [listFilterStatus, setListFilterStatus] = useState("All");
+  const [listViewPage, setListViewPage] = useState(1);
+  const [listViewPageSize, setListViewPageSize] = useState(10);
+  const [listViewRawTasks, setListViewRawTasks] = useState([]);
+  const [listViewTotal, setListViewTotal] = useState(0);
+  const [listViewLoading, setListViewLoading] = useState(false);
+  const [listViewError, setListViewError] = useState("");
+  const [listViewIsServerPaged, setListViewIsServerPaged] = useState(false);
   const [pendingInvitations, setPendingInvitations] = useState([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [closeGroupModalOpen, setCloseGroupModalOpen] = useState(false);
@@ -261,6 +268,133 @@ export default function MyGroup() {
 
   const normalizeTitle = (value = "") =>
     value.toLowerCase().replace(/\s+/g, "_");
+  const normalizeKey = (value = "") =>
+    (value || "").toString().trim().toLowerCase();
+  const toApiStatusFilter = (value = "") => {
+    const normalized = normalizeKey(value);
+    if (!normalized || normalized === "all") return undefined;
+    return normalized === "todo" ? "to_do" : normalized;
+  };
+  const normalizeAssignees = (assignees) => {
+    const list = Array.isArray(assignees)
+      ? assignees
+      : assignees
+      ? [assignees]
+      : [];
+    return list
+      .map((assignee) => {
+        if (!assignee) return null;
+        const rawId =
+          assignee.id ||
+          assignee.userId ||
+          assignee.memberId ||
+          assignee.email ||
+          assignee;
+        const matched = (kanbanMembers || []).find(
+          (member) =>
+            normalizeKey(member.id) === normalizeKey(rawId) ||
+            normalizeKey(member.userId) === normalizeKey(rawId) ||
+            normalizeKey(member.email) === normalizeKey(rawId)
+        );
+        const fallbackName =
+          assignee.name ||
+          assignee.displayName ||
+          assignee.fullName ||
+          assignee.email ||
+          rawId ||
+          "";
+        if (matched) {
+          return {
+            id: matched.id || rawId,
+            name:
+              matched.name ||
+              matched.displayName ||
+              matched.fullName ||
+              fallbackName ||
+              rawId ||
+              "",
+            email: matched.email || "",
+            avatarUrl:
+              matched.avatarUrl ||
+              matched.avatarURL ||
+              matched.photoUrl ||
+              matched.photoURL ||
+              "",
+          };
+        }
+        return {
+          id: rawId || fallbackName || "",
+          name: fallbackName || rawId || "",
+          email: assignee.email || "",
+          avatarUrl:
+            assignee.avatarUrl ||
+            assignee.avatarURL ||
+            assignee.photoUrl ||
+            assignee.photoURL ||
+            "",
+        };
+      })
+      .filter((item) => item && (item.id || item.name));
+  };
+  const normalizeListTask = (task) => {
+    if (!task) return null;
+    const statusValue = task.status || task.columnId || task.state || "";
+    const columnIdValue = task.columnId || statusValue || "";
+    return {
+      id: task.id || task.taskId || task._id,
+      columnId: columnIdValue,
+      title: task.title || task.name || "",
+      description: task.description || "",
+      priority: (task.priority || "").toLowerCase(),
+      status: statusValue,
+      dueDate:
+        task.dueDate ||
+        task.deadline ||
+        task.targetDate ||
+        task.endDate ||
+        null,
+      assignees: normalizeAssignees(
+        task.assignees || task.assignee || task.members || []
+      ),
+      comments: task.comments || task.commentResponses || [],
+    };
+  };
+  const parseListResponse = (response) => {
+    const payload = response?.data ?? response;
+    if (Array.isArray(payload?.columns)) {
+      const items = payload.columns.flatMap((col) =>
+        Array.isArray(col?.tasks) ? col.tasks : []
+      );
+      const total =
+        payload?.page?.totalElements ||
+        payload?.page?.totalItems ||
+        payload?.totalItems ||
+        payload?.total ||
+        payload?.totalCount ||
+        items.length;
+      return { items, total, fromColumns: true };
+    }
+    const items = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload?.results)
+      ? payload.results
+      : Array.isArray(payload?.tasks)
+      ? payload.tasks
+      : [];
+    const total =
+      payload?.totalItems ||
+      payload?.total ||
+      payload?.totalCount ||
+      payload?.page?.totalElements ||
+      payload?.page?.totalItems ||
+      payload?.meta?.total ||
+      items.length;
+    return { items, total, fromColumns: false };
+  };
   const tasks =
     board?.columns?.flatMap((col) => col.tasks || [])?.filter(Boolean) || [];
   const sortedColumns = useMemo(
@@ -274,20 +408,41 @@ export default function MyGroup() {
     () => sortedColumns?.[0]?.[0] || Object.keys(columnMeta || {})[0] || null,
     [sortedColumns, columnMeta]
   );
-  const listFilteredColumns = useMemo(() => {
-    const ids = Object.keys(columns || {});
-    return filterColumns(columns || {}, "", listFilterStatus, "All", ids);
-  }, [columns, listFilterStatus]);
-  const flattenedTasks = useMemo(() => {
-    return Object.entries(listFilteredColumns || {}).flatMap(
-      ([colId, tasksInCol]) =>
-        (tasksInCol || []).map((task) => ({
-          ...task,
-          columnId: colId,
-          columnTitle: columnMeta?.[colId]?.title || colId,
-        }))
-    );
-  }, [listFilteredColumns, columnMeta]);
+  const listViewTasks = useMemo(() => {
+    return (listViewRawTasks || [])
+      .map((task) => normalizeListTask(task))
+      .filter(Boolean);
+  }, [listViewRawTasks, kanbanMembers]);
+  const listViewFilteredTasks = useMemo(() => {
+    const normalizeStatusKey = (value = "") =>
+      value.toString().toLowerCase().replace(/[\s_]+/g, "");
+    const statusFilterKey = normalizeStatusKey(listFilterStatus);
+    return listViewTasks.filter((task) => {
+      const effectiveStatus = normalizeStatusKey(
+        columnMeta?.[task.columnId]?.title || task.status || task.columnId || ""
+      );
+      return (
+        listFilterStatus === "All" ||
+        effectiveStatus === statusFilterKey
+      );
+    });
+  }, [listViewTasks, listFilterStatus, columnMeta]);
+  const listViewTotalForPager = useMemo(() => {
+    return listViewIsServerPaged
+      ? listViewTotal
+      : listViewFilteredTasks.length;
+  }, [listViewIsServerPaged, listViewTotal, listViewFilteredTasks]);
+  const listViewPagedTasks = useMemo(() => {
+    if (listViewIsServerPaged) return listViewFilteredTasks;
+    const start = Math.max(0, (listViewPage - 1) * listViewPageSize);
+    const end = start + listViewPageSize;
+    return listViewFilteredTasks.slice(start, end);
+  }, [
+    listViewIsServerPaged,
+    listViewFilteredTasks,
+    listViewPage,
+    listViewPageSize,
+  ]);
   const statusOptions = useMemo(() => {
     const map = new Map();
     const addStatus = (raw) => {
@@ -307,6 +462,54 @@ export default function MyGroup() {
     });
     return Array.from(map.values());
   }, [columns, columnMeta]);
+  const taskById = useMemo(() => {
+    const map = new Map();
+    Object.values(columns || {}).forEach((tasksInCol) => {
+      (tasksInCol || []).forEach((task) => {
+        if (task?.id) map.set(task.id, task);
+      });
+    });
+    return map;
+  }, [columns]);
+  useEffect(() => {
+    setListViewPage(1);
+  }, [listFilterStatus, listViewPageSize, id]);
+  useEffect(() => {
+    if (activeWorkspaceTab !== "list" || !id) return;
+    const fetchListViewTasks = async () => {
+      setListViewLoading(true);
+      setListViewError("");
+      try {
+        const params = {
+          page: listViewPage,
+          pageSize: listViewPageSize,
+        };
+        const apiStatus = toApiStatusFilter(listFilterStatus);
+        if (apiStatus) params.status = apiStatus;
+        const res = await BoardService.getBoard(id, params);
+        const { items, total, fromColumns } = parseListResponse(res);
+        setListViewRawTasks(items);
+        setListViewTotal(
+          Number.isFinite(Number(total)) ? Number(total) : items.length
+        );
+        setListViewIsServerPaged(!fromColumns);
+      } catch (err) {
+        setListViewError(t("failedLoadTasks") || "Failed to load tasks.");
+        setListViewRawTasks([]);
+        setListViewTotal(0);
+        setListViewIsServerPaged(false);
+      } finally {
+        setListViewLoading(false);
+      }
+    };
+    fetchListViewTasks();
+  }, [
+    activeWorkspaceTab,
+    id,
+    listViewPage,
+    listViewPageSize,
+    listFilterStatus,
+  ]);
 
   const recentActivity = tasks
     .slice()
@@ -559,6 +762,11 @@ export default function MyGroup() {
     value
       .replace(/_/g, " ")
       .replace(/\b\w/g, (c) => c.toUpperCase());
+  const handleOpenListTask = (task) => {
+    if (!task) return;
+    const fullTask = taskById.get(task.id);
+    setSelectedTask(fullTask || task);
+  };
   const handleMoveColumnLeft = async (columnId, columnMetaData = {}) => {
     // Lấy danh sách tất cả columns và sắp xếp theo position
     const sortedColumns = Object.entries(columnMeta || {})
@@ -1189,17 +1397,34 @@ export default function MyGroup() {
                           ))}
                         </select>
                         <div className="text-sm text-gray-500">
-                          {flattenedTasks.length} tasks
+                          {listViewTotalForPager} tasks
                         </div>
                       </div>
-                      <ListView
-                        tasks={flattenedTasks}
-                        columnMeta={columnMeta}
-                        onOpenTask={setSelectedTask}
-                        onCreateTask={
-                          isReadOnly ? undefined : handleQuickCreateTask
-                        }
-                        t={t}
+                      {listViewLoading ? (
+                        <div className="text-sm text-gray-500">
+                          {t("loading") || "Loading..."}
+                        </div>
+                      ) : listViewError ? (
+                        <div className="text-sm text-red-500">
+                          {listViewError}
+                        </div>
+                      ) : (
+                        <ListView
+                          tasks={listViewPagedTasks}
+                          columnMeta={columnMeta}
+                          onOpenTask={handleOpenListTask}
+                          onCreateTask={
+                            isReadOnly ? undefined : handleQuickCreateTask
+                          }
+                          t={t}
+                        />
+                      )}
+                      <Pagination
+                        page={listViewPage}
+                        setPage={setListViewPage}
+                        pageSize={listViewPageSize}
+                        setPageSize={setListViewPageSize}
+                        total={listViewTotalForPager}
                       />
                     </div>
                   )}

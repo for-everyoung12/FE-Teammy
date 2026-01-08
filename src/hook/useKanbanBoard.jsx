@@ -259,7 +259,7 @@ export function useKanbanBoard(groupId, options = {}) {
   const [error, setError] = useState(null);
   const commentsLoadedRef = useRef(false);
   const dragProcessingRef = useRef(false);
-  const pendingMoveRef = useRef(null);
+  const pendingMovesRef = useRef([]);
 
   const isGroupClosed = () => {
     if (skipApiCalls) return true;
@@ -269,12 +269,16 @@ export function useKanbanBoard(groupId, options = {}) {
   };
 
   const buildStateFromApi = (data) => {
+    const normalizeStatusFromColumn = (value = "") =>
+      value.toLowerCase().replace(/\s+/g, "_");
     const colState = {};
     const metaState = {};
     if (data?.columns && Array.isArray(data.columns)) {
       data.columns.forEach((col) => {
         const key = col.id || col.columnId || col.name || col.columnName;
         if (!key) return;
+        const columnStatus =
+          normalizeStatusFromColumn(col.columnName || col.name || key);
         const tasks = col.tasks || col.taskResponses || [];
         colState[key] = tasks.map((t) => ({
           id: t.id || t.taskId,
@@ -282,7 +286,7 @@ export function useKanbanBoard(groupId, options = {}) {
           title: t.title || "",
           description: t.description || "",
           priority: (t.priority || "").toLowerCase(),
-          status: t.status || "",
+          status: columnStatus || t.status || "",
           dueDate: t.dueDate || "",
           assignees: mapAssigneesWithMembers(
             normalizePersonList(t.assignees),
@@ -528,12 +532,15 @@ export function useKanbanBoard(groupId, options = {}) {
       targetStatus,
     };
 
-    // Coalesce move requests: keep the latest while one is in-flight
+    // Queue move requests: keep latest per task while one is in-flight
     if (dragProcessingRef.current) {
-      pendingMoveRef.current = movePayload;
+      const queue = pendingMovesRef.current || [];
+      const nextQueue = queue.filter((item) => item.taskId !== movePayload.taskId);
+      nextQueue.push(movePayload);
+      pendingMovesRef.current = nextQueue;
       return;
     }
-    pendingMoveRef.current = null;
+    pendingMovesRef.current = [];
     executeMove(movePayload);
   };
 
@@ -555,17 +562,35 @@ export function useKanbanBoard(groupId, options = {}) {
         movePayload.nextTaskId = payload.nextTaskId;
       }
       
-      // moveTask API already handles status update based on column, no need to call updateTaskFields
-      await BoardService.moveTask(groupId, payload.taskId, movePayload);
+      // moveTask API handles position; updateTask keeps status in sync with column title.
+      await BoardService.moveTask(groupId, payload.taskId, movePayload, {
+        isLoading: false,
+      });
+      if (payload.targetStatus) {
+        const snapshot = getTaskSnapshot(payload.taskId) || {};
+        await BoardService.updateTask(
+          groupId,
+          payload.taskId,
+          {
+            title: snapshot.title || "Untitled task",
+            description: snapshot.description || "",
+            priority: snapshot.priority || "medium",
+            status: payload.targetStatus,
+            dueDate: snapshot.dueDate || null,
+          },
+          { isLoading: false }
+        );
+      }
     } catch (err) {
       console.error("Error moving task:", err);
       fetchBoard();
     } finally {
       dragProcessingRef.current = false;
-      const pending = pendingMoveRef.current;
-      pendingMoveRef.current = null;
-      if (pending) {
-        executeMove(pending);
+      const queue = pendingMovesRef.current || [];
+      const next = queue.shift();
+      pendingMovesRef.current = queue;
+      if (next) {
+        executeMove(next);
       }
     }
   };
@@ -648,11 +673,22 @@ export function useKanbanBoard(groupId, options = {}) {
       [payload.columnId]: [...(prev[payload.columnId] || []), optimisticTask],
     }));
     try {
-      await BoardService.createTask(groupId, {
+      const created = await BoardService.createTask(groupId, {
         ...payload,
         dueDate: normalizedDueDate,
-        assignees: assigneeIds,
+        assigneeIds,
       });
+      const createdTaskId =
+        created?.data?.taskId ||
+        created?.data?.id ||
+        created?.taskId ||
+        created?.id ||
+        null;
+      if (createdTaskId && assigneeIds.length > 0) {
+        await BoardService.replaceTaskAssignees(groupId, createdTaskId, {
+          userIds: assigneeIds,
+        });
+      }
       // Ensure groupMembers are loaded before fetching board to properly map assignees
       let finalMembers = membersToUse;
       if (groupMembers.length === 0) {
@@ -776,21 +812,54 @@ export function useKanbanBoard(groupId, options = {}) {
       normalizedChanges.dueDate = normalizeDueDate(normalizedChanges.dueDate);
     }
     const snapshot = getTaskSnapshot(taskId) || {};
-    
-    // If status (columnId) is changing, update columnId in the changes
-    if (normalizedChanges.status && normalizedChanges.status !== snapshot.status) {
-      normalizedChanges.columnId = normalizedChanges.status;
+
+    const resolveStatusAndColumn = (statusValue, columnIdValue) => {
+      let resolvedStatus = statusValue;
+      let resolvedColumnId = columnIdValue;
+      if (statusValue && columnMeta?.[statusValue]) {
+        resolvedColumnId = statusValue;
+        resolvedStatus = normalizeStatus(
+          columnMeta[statusValue]?.title || statusValue
+        );
+      } else if (statusValue && !columnIdValue) {
+        const inferredColumnId = getColumnIdByStatus(statusValue);
+        if (inferredColumnId) {
+          resolvedColumnId = inferredColumnId;
+        }
+      }
+      if (!resolvedStatus && resolvedColumnId && columnMeta?.[resolvedColumnId]) {
+        resolvedStatus = normalizeStatus(
+          columnMeta[resolvedColumnId]?.title || resolvedColumnId
+        );
+      }
+      return { resolvedStatus, resolvedColumnId };
+    };
+
+    if (normalizedChanges.status || normalizedChanges.columnId) {
+      const { resolvedStatus, resolvedColumnId } = resolveStatusAndColumn(
+        normalizedChanges.status,
+        normalizedChanges.columnId
+      );
+      if (resolvedStatus) normalizedChanges.status = resolvedStatus;
+      if (resolvedColumnId) normalizedChanges.columnId = resolvedColumnId;
     }
     
     patchTaskState(taskId, () => normalizedChanges);
     try {
+      const { resolvedStatus, resolvedColumnId } = resolveStatusAndColumn(
+        normalizedChanges.status || snapshot.status,
+        normalizedChanges.columnId || snapshot.columnId
+      );
+      const statusToSend = resolvedStatus || "todo";
+      const payloadChanges = { ...normalizedChanges, status: statusToSend };
+      delete payloadChanges.columnId;
       await BoardService.updateTask(groupId, taskId, {
         title: snapshot.title || "Untitled task",
         description: snapshot.description || "",
         priority: snapshot.priority || "medium",
-        status: snapshot.status || "todo",
+        status: statusToSend,
         dueDate: snapshot.dueDate || null,
-        ...normalizedChanges,
+        ...payloadChanges,
       });
       // Only trigger moveTaskToColumn if status changed and skipMove is false
       if (
@@ -798,8 +867,8 @@ export function useKanbanBoard(groupId, options = {}) {
         normalizedChanges.status &&
         normalizedChanges.status !== snapshot.status
       ) {
-        // status is now the columnId directly
-        const targetColumnId = normalizedChanges.status;
+        const targetColumnId =
+          normalizedChanges.columnId || resolvedColumnId || normalizedChanges.status;
         if (targetColumnId && columns[targetColumnId] !== undefined) {
           moveTaskToColumn(taskId, targetColumnId);
         }
