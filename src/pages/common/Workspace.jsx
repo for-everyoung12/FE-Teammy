@@ -18,6 +18,7 @@ import { useLocation, useParams } from "react-router-dom";
 import { GroupService } from "../../services/group.service";
 import { BoardService } from "../../services/board.service";
 import ListView from "../../components/common/workspace/ListView";
+import { Pagination } from "../../components/common/forum/Pagination";
 
 const Workspace = () => {
   const { id: routeGroupId } = useParams();
@@ -44,6 +45,13 @@ const Workspace = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [listViewFilterStatus, setListViewFilterStatus] = useState("All");
   const [listViewFilterPriority, setListViewFilterPriority] = useState("All");
+  const [listViewPage, setListViewPage] = useState(1);
+  const [listViewPageSize, setListViewPageSize] = useState(10);
+  const [listViewRawTasks, setListViewRawTasks] = useState([]);
+  const [listViewTotal, setListViewTotal] = useState(0);
+  const [listViewLoading, setListViewLoading] = useState(false);
+  const [listViewError, setListViewError] = useState("");
+  const [listViewIsServerPaged, setListViewIsServerPaged] = useState(false);
 
   const {
     columns,
@@ -81,6 +89,133 @@ const Workspace = () => {
 
   const normalizeTitle = (value = "") =>
     value.toLowerCase().replace(/\s+/g, "_");
+  const normalizeKey = (value = "") =>
+    (value || "").toString().trim().toLowerCase();
+  const toApiStatusFilter = (value = "") => {
+    const normalized = normalizeKey(value);
+    if (!normalized || normalized === "all") return undefined;
+    return normalized === "todo" ? "to_do" : normalized;
+  };
+  const normalizeAssignees = (assignees) => {
+    const list = Array.isArray(assignees)
+      ? assignees
+      : assignees
+      ? [assignees]
+      : [];
+    return list
+      .map((assignee) => {
+        if (!assignee) return null;
+        const rawId =
+          assignee.id ||
+          assignee.userId ||
+          assignee.memberId ||
+          assignee.email ||
+          assignee;
+        const matched = (groupMembers || []).find(
+          (member) =>
+            normalizeKey(member.id) === normalizeKey(rawId) ||
+            normalizeKey(member.userId) === normalizeKey(rawId) ||
+            normalizeKey(member.email) === normalizeKey(rawId)
+        );
+        const fallbackName =
+          assignee.name ||
+          assignee.displayName ||
+          assignee.fullName ||
+          assignee.email ||
+          rawId ||
+          "";
+        if (matched) {
+          return {
+            id: matched.id || rawId,
+            name:
+              matched.name ||
+              matched.displayName ||
+              matched.fullName ||
+              fallbackName ||
+              rawId ||
+              "",
+            email: matched.email || "",
+            avatarUrl:
+              matched.avatarUrl ||
+              matched.avatarURL ||
+              matched.photoUrl ||
+              matched.photoURL ||
+              "",
+          };
+        }
+        return {
+          id: rawId || fallbackName || "",
+          name: fallbackName || rawId || "",
+          email: assignee.email || "",
+          avatarUrl:
+            assignee.avatarUrl ||
+            assignee.avatarURL ||
+            assignee.photoUrl ||
+            assignee.photoURL ||
+            "",
+        };
+      })
+      .filter((item) => item && (item.id || item.name));
+  };
+  const normalizeListTask = (task) => {
+    if (!task) return null;
+    const statusValue = task.status || task.columnId || task.state || "";
+    const columnIdValue = task.columnId || statusValue || "";
+    return {
+      id: task.id || task.taskId || task._id,
+      columnId: columnIdValue,
+      title: task.title || task.name || "",
+      description: task.description || "",
+      priority: (task.priority || "").toLowerCase(),
+      status: statusValue,
+      dueDate:
+        task.dueDate ||
+        task.deadline ||
+        task.targetDate ||
+        task.endDate ||
+        null,
+      assignees: normalizeAssignees(
+        task.assignees || task.assignee || task.members || []
+      ),
+      comments: task.comments || task.commentResponses || [],
+    };
+  };
+  const parseListResponse = (response) => {
+    const payload = response?.data ?? response;
+    if (Array.isArray(payload?.columns)) {
+      const items = payload.columns.flatMap((col) =>
+        Array.isArray(col?.tasks) ? col.tasks : []
+      );
+      const total =
+        payload?.page?.totalElements ||
+        payload?.page?.totalItems ||
+        payload?.totalItems ||
+        payload?.total ||
+        payload?.totalCount ||
+        items.length;
+      return { items, total, fromColumns: true };
+    }
+    const items = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.data)
+      ? payload.data
+      : Array.isArray(payload?.items)
+      ? payload.items
+      : Array.isArray(payload?.results)
+      ? payload.results
+      : Array.isArray(payload?.tasks)
+      ? payload.tasks
+      : [];
+    const total =
+      payload?.totalItems ||
+      payload?.total ||
+      payload?.totalCount ||
+      payload?.page?.totalElements ||
+      payload?.page?.totalItems ||
+      payload?.meta?.total ||
+      items.length;
+    return { items, total, fromColumns: false };
+  };
   const handleCreateColumn = () => {
     columnForm.validateFields().then((values) => {
       const positionValue = Number(values.position);
@@ -181,18 +316,66 @@ const Workspace = () => {
         }))
     );
   }, [filteredColumns, columnMeta]);
-
-  const listViewFilteredTasks = useMemo(() => {
-    return flattenedTasks.filter((task) => {
-      const statusMatch =
-        listViewFilterStatus === "All" ||
-        (task.status || "").toLowerCase() === listViewFilterStatus.toLowerCase();
-      const priorityMatch =
-        listViewFilterPriority === "All" ||
-        (task.priority || "").toLowerCase() === listViewFilterPriority.toLowerCase();
-      return statusMatch && priorityMatch;
+  const taskById = useMemo(() => {
+    const map = new Map();
+    Object.values(columns || {}).forEach((tasksInCol) => {
+      (tasksInCol || []).forEach((task) => {
+        if (task?.id) map.set(task.id, task);
+      });
     });
-  }, [flattenedTasks, listViewFilterStatus, listViewFilterPriority]);
+    return map;
+  }, [columns]);
+
+  const listViewTasks = useMemo(() => {
+    return (listViewRawTasks || [])
+      .map((task) => normalizeListTask(task))
+      .filter(Boolean);
+  }, [listViewRawTasks, groupMembers]);
+  const listViewFilteredTasks = useMemo(() => {
+    const normalizeStatusKey = (value = "") =>
+      value.toString().toLowerCase().replace(/[\s_]+/g, "");
+    const searchValue = (search || "").toLowerCase().trim();
+    const statusFilterKey = normalizeStatusKey(listViewFilterStatus);
+    const priorityFilter = (listViewFilterPriority || "").toLowerCase();
+    return listViewTasks.filter((task) => {
+      const effectiveStatus = normalizeStatusKey(
+        columnMeta?.[task.columnId]?.title || task.status || task.columnId || ""
+      );
+      const matchesSearch =
+        !searchValue ||
+        (task.title || "").toLowerCase().includes(searchValue) ||
+        (task.description || "").toLowerCase().includes(searchValue);
+      const matchesStatus =
+        listViewFilterStatus === "All" ||
+        effectiveStatus === statusFilterKey;
+      const matchesPriority =
+        listViewFilterPriority === "All" ||
+        (task.priority || "").toLowerCase() === priorityFilter;
+      return matchesSearch && matchesStatus && matchesPriority;
+    });
+  }, [
+    listViewTasks,
+    search,
+    listViewFilterStatus,
+    listViewFilterPriority,
+    columnMeta,
+  ]);
+  const listViewTotalForPager = useMemo(() => {
+    return listViewIsServerPaged
+      ? listViewTotal
+      : listViewFilteredTasks.length;
+  }, [listViewIsServerPaged, listViewTotal, listViewFilteredTasks]);
+  const listViewPagedTasks = useMemo(() => {
+    if (listViewIsServerPaged) return listViewFilteredTasks;
+    const start = Math.max(0, (listViewPage - 1) * listViewPageSize);
+    const end = start + listViewPageSize;
+    return listViewFilteredTasks.slice(start, end);
+  }, [
+    listViewIsServerPaged,
+    listViewFilteredTasks,
+    listViewPage,
+    listViewPageSize,
+  ]);
   const statusOptions = useMemo(() => {
     const map = new Map();
     const addStatus = (raw) => {
@@ -221,6 +404,47 @@ const Workspace = () => {
     });
     return Array.from(set);
   }, [columns]);
+  useEffect(() => {
+    setListViewPage(1);
+  }, [listViewFilterStatus, listViewFilterPriority, listViewPageSize, resolvedGroupId]);
+  useEffect(() => {
+    if (boardView !== "list" || !resolvedGroupId) return;
+    const fetchListViewTasks = async () => {
+      setListViewLoading(true);
+      setListViewError("");
+      try {
+        const params = {
+          page: listViewPage,
+          pageSize: listViewPageSize,
+        };
+        const apiStatus = toApiStatusFilter(listViewFilterStatus);
+        if (apiStatus) params.status = apiStatus;
+        const res = await BoardService.getBoard(resolvedGroupId, params);
+        const { items, total, fromColumns } = parseListResponse(res);
+        setListViewRawTasks(items);
+        setListViewTotal(
+          Number.isFinite(Number(total)) ? Number(total) : items.length
+        );
+        setListViewIsServerPaged(!fromColumns);
+      } catch (err) {
+        setListViewError(
+          t("failedLoadTasks") || "Failed to load tasks."
+        );
+        setListViewRawTasks([]);
+        setListViewTotal(0);
+        setListViewIsServerPaged(false);
+      } finally {
+        setListViewLoading(false);
+      }
+    };
+    fetchListViewTasks();
+  }, [
+    boardView,
+    resolvedGroupId,
+    listViewPage,
+    listViewPageSize,
+    listViewFilterStatus,
+  ]);
   const firstColumnId = useMemo(
     () => sortedColumns?.[0]?.[0] || Object.keys(columnMeta || {})[0] || null,
     [sortedColumns, columnMeta]
@@ -284,6 +508,11 @@ const Workspace = () => {
     { name: "Requirements.docx", owner: "Leader", size: "650 KB" },
     { name: "Architecture.drawio", owner: "Team", size: "430 KB" },
   ];
+  const handleOpenListTask = (task) => {
+    if (!task) return;
+    const fullTask = taskById.get(task.id);
+    setSelectedTask(fullTask || task);
+  };
 
   return (
     <div className="relative">
@@ -542,7 +771,10 @@ const Workspace = () => {
                     {t("reset") || "Reset"}
                   </button>
                   <div className="text-sm text-gray-500">
-                    {flattenedTasks.length} tasks
+                    {boardView === "list"
+                      ? listViewTotalForPager
+                      : flattenedTasks.length}{" "}
+                    tasks
                   </div>
                 </div>
               </div>
@@ -644,13 +876,30 @@ const Workspace = () => {
                   )}
                 </DndContext>
               ) : (
-                <ListView
-                  tasks={listViewFilteredTasks}
-                  columnMeta={columnMeta}
-                  onOpenTask={setSelectedTask}
-                  onCreateTask={handleQuickCreateTask}
-                  t={t}
-                />
+                <div className="space-y-4">
+                  {listViewLoading ? (
+                    <div className="text-sm text-gray-500">
+                      {t("loading") || "Loading..."}
+                    </div>
+                  ) : listViewError ? (
+                    <div className="text-sm text-red-500">{listViewError}</div>
+                  ) : (
+                    <ListView
+                      tasks={listViewPagedTasks}
+                      columnMeta={columnMeta}
+                      onOpenTask={handleOpenListTask}
+                      onCreateTask={handleQuickCreateTask}
+                      t={t}
+                    />
+                  )}
+                  <Pagination
+                    page={listViewPage}
+                    setPage={setListViewPage}
+                    pageSize={listViewPageSize}
+                    setPageSize={setListViewPageSize}
+                    total={listViewTotalForPager}
+                  />
+                </div>
               )}
             </>
           )}

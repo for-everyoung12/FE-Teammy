@@ -49,8 +49,6 @@ export default function ReportsTab({ groupId, groupStatus }) {
   const backlog = data?.tasks?.backlog || {};
   const columns = data?.tasks?.columns || [];
   const milestones = data?.tasks?.milestones || [];
-  const team = data?.team || {};
-
   // Extract all backlog items from milestones
   const allBacklogItems = useMemo(() => {
     const items = [];
@@ -65,11 +63,6 @@ export default function ReportsTab({ groupId, groupStatus }) {
     });
     return items;
   }, [milestones]);
-
-  const completedItems = useMemo(
-    () => allBacklogItems.filter((item) => (item.status || "").toLowerCase() === "completed"),
-    [allBacklogItems]
-  );
 
   const overdueItems = useMemo(() => {
     const now = dayjs();
@@ -243,39 +236,30 @@ export default function ReportsTab({ groupId, groupStatus }) {
         </div>
 
         <div className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm">
-          <h4 className="font-semibold text-gray-900 mb-2">
-            {t("teamInfo") || "Team"}
-          </h4>
-          <div className="text-sm text-gray-700">
-            {t("activeMembers") || "Active members"}: {team.activeMemberCount ?? 0}
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-semibold text-gray-900">
+              {t("overdueItems") || "Overdue items"}
+            </h4>
+            <span className="text-sm text-gray-500">
+              {overdueItems.length} {t("items") || "items"}
+            </span>
           </div>
-          <div className="mt-2 space-y-1 text-sm text-gray-700">
-            <div className="font-semibold text-gray-900">{t("leader") || "Leader"}</div>
-            {(team.leaders || []).map((u) => (
-              <div key={u.userId} className="text-gray-700">
-                {u.displayName}
-              </div>
-            ))}
-            <div className="font-semibold text-gray-900 mt-2">
-              {t("mentor") || "Mentor"}
-              {Array.isArray(team.mentors) && team.mentors.length > 1 && (
-                <span className="ml-2 text-xs font-normal text-gray-500">
-                  ({team.mentors.length})
-                </span>
-              )}
+          {overdueItems.length === 0 ? (
+            <div className="text-sm text-gray-500">
+              {t("noOverdueTasks") || "No overdue tasks"}
             </div>
-            {Array.isArray(team.mentors) && team.mentors.length > 0 ? (
-              team.mentors.map((mentor, idx) => (
-                <div key={mentor.userId || mentor.id || idx} className="text-gray-700">
-                  {mentor.displayName || mentor.name}
-                </div>
-              ))
-            ) : team.mentor ? (
-              <div className="text-gray-700">{team.mentor.displayName || team.mentor.name}</div>
-            ) : (
-              <div className="text-gray-500">{t("noMentor") || "No mentor"}</div>
-            )}
-          </div>
+          ) : (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {overdueItems.map((item) => (
+                <TaskItem
+                  key={item.backlogItemId || item.id || item._id}
+                  item={item}
+                  icon={<AlertTriangle className="w-4 h-4 text-red-500 mt-0.5" />}
+                  showDueDate
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm">
