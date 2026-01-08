@@ -2,9 +2,10 @@ import { BaseService } from "../config/basic.service";
 import { API } from "../consts/path.api";
 
 export const BoardService = {
-  getBoard(groupId) {
+  getBoard(groupId, params = {}) {
     return BaseService.get({
       url: API.BOARD.DETAIL(groupId),
+      params,
       isLoading: true,
     });
   },
@@ -40,11 +41,11 @@ export const BoardService = {
     });
   },
 
-  updateTask(groupId, taskId, payload) {
+  updateTask(groupId, taskId, payload, options = {}) {
     return BaseService.put({
       url: API.BOARD.UPDATE_TASK(groupId, taskId),
       payload,
-      isLoading: true,
+      isLoading: options.isLoading ?? true,
     });
   },
 
@@ -55,7 +56,7 @@ export const BoardService = {
     });
   },
 
-  moveTask(groupId, taskId, payload) {
+  moveTask(groupId, taskId, payload, options = {}) {
     // API expects columnId, prevTaskId, nextTaskId directly (not wrapped in req)
     const requestPayload = {
       columnId: payload.columnId,
@@ -72,7 +73,7 @@ export const BoardService = {
     return BaseService.post({
       url: API.BOARD.MOVE_TASK(groupId, taskId),
       payload: requestPayload,
-      isLoading: true,
+      isLoading: options.isLoading ?? true,
     });
   },
 

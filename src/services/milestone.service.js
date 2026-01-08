@@ -47,4 +47,35 @@ export const MilestoneService = {
       isLoading: true,
     });
   },
+
+  getOverdueActions(groupId, milestoneId) {
+    return BaseService.get({
+      url: `/groups/${groupId}/tracking/milestones/${milestoneId}/overdue-actions`,
+      isLoading: true,
+    });
+  },
+
+  extendMilestone(groupId, milestoneId, payload = {}) {
+    return BaseService.post({
+      url: `/groups/${groupId}/tracking/milestones/${milestoneId}/extend`,
+      payload,
+      isLoading: true,
+    });
+  },
+
+  moveMilestoneItems(groupId, milestoneId, payload = {}) {
+    return BaseService.post({
+      url: `/groups/${groupId}/tracking/milestones/${milestoneId}/move-tasks`,
+      payload,
+      isLoading: true,
+    });
+  },
+
+  getTimelineMilestones(groupId, startDate, endDate) {
+    return BaseService.get({
+      url: `/groups/${groupId}/tracking/timeline`,
+      params: { startDate, endDate },
+      isLoading: true,
+    });
+  },
 };

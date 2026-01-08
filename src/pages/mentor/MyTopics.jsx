@@ -90,8 +90,8 @@ const MyTopics = () => {
   }, []);
 
   return (
-    <div className="min-h-screen pt-20 md:pt-24 pb-12">
-      <div className="px-4 sm:px-6 md:px-8 space-y-6">
+    <div className="min-h-screen pb-12">
+      <div className="space-y-6">
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black">
             {t("topics") || "Topics"}

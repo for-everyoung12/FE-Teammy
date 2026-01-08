@@ -1,9 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { Check, Loader2, UserPlus, X, Users } from "lucide-react";
+import {
+  Calendar,
+  Check,
+  ChevronRight,
+  Loader2,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import { Modal, notification } from "antd";
 import { InvitationService } from "../../services/invitation.service";
 import { useTranslation } from "../../hook/useTranslation";
 import { GroupService } from "../../services/group.service";
+import { TopicService } from "../../services/topic.service";
 import { useNavigate } from "react-router-dom";
 
 const Invitations = () => {
@@ -30,7 +39,84 @@ const Invitations = () => {
       setLoading(true);
       const res = await InvitationService.list();
       const data = Array.isArray(res?.data) ? res.data : [];
-      setInvitations(data);
+      const enrichedInvitations = await Promise.all(
+        data.map(async (invitation) => {
+          let groupDetail = null;
+          if (invitation.groupId) {
+            try {
+              const groupRes = await GroupService.getGroupDetail(
+                invitation.groupId
+              );
+              groupDetail = groupRes?.data || groupRes || null;
+            } catch {
+              groupDetail = null;
+            }
+          }
+
+          let topicDetail = null;
+          const topicId =
+            invitation.topicId ||
+            groupDetail?.topic?.id ||
+            groupDetail?.topicId;
+          if (topicId) {
+            try {
+              const topicRes = await TopicService.getTopicDetail(topicId);
+              topicDetail = topicRes?.data || topicRes || null;
+            } catch {
+              topicDetail = null;
+            }
+          }
+
+          return {
+            ...invitation,
+            groupName:
+              invitation.groupName ||
+              groupDetail?.name ||
+              groupDetail?.title,
+            description: invitation.description || groupDetail?.description,
+            currentMembers:
+              invitation.currentMembers ?? groupDetail?.currentMembers,
+            maxMembers: invitation.maxMembers ?? groupDetail?.maxMembers,
+            skills:
+              Array.isArray(invitation.skills) && invitation.skills.length > 0
+                ? invitation.skills
+                : Array.isArray(groupDetail?.skills)
+                ? groupDetail.skills
+                : [],
+            semester:
+              invitation.semester ||
+              groupDetail?.semester ||
+              groupDetail?.semesterLabel,
+            semesterLabel:
+              invitation.semesterLabel ||
+              groupDetail?.semesterLabel ||
+              groupDetail?.semester,
+            topicTitle:
+              invitation.topicTitle ||
+              topicDetail?.title ||
+              groupDetail?.topic?.title ||
+              groupDetail?.topicName,
+            topicDescription:
+              invitation.topicDescription ||
+              topicDetail?.description ||
+              groupDetail?.topic?.description,
+            topicSkills:
+              Array.isArray(invitation.topicSkills) &&
+              invitation.topicSkills.length > 0
+                ? invitation.topicSkills
+                : Array.isArray(topicDetail?.skills)
+                ? topicDetail.skills
+                : Array.isArray(groupDetail?.topic?.skills)
+                ? groupDetail.topic.skills
+                : [],
+            topic: groupDetail?.topic || invitation.topic,
+            major: groupDetail?.major || invitation.major,
+            mentor: groupDetail?.mentor || invitation.mentor,
+            mentors: groupDetail?.mentors || invitation.mentors,
+          };
+        })
+      );
+      setInvitations(enrichedInvitations);
     } catch {
       setInvitations([]);
     } finally {
@@ -116,6 +202,53 @@ const Invitations = () => {
     return value === "rejected" || value === "declined";
   };
 
+  const getInvitationTopic = (inv) =>
+    inv.topicTitle ||
+    inv.topic?.title ||
+    t("topicUndefined") ||
+    "Topic not set";
+  const formatSemesterValue = (value) => {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "object") {
+      const season =
+        value.season || value.term || value.name || value.semesterName;
+      const year = value.year || value.academicYear;
+      if (season && year) return `${season} ${year}`;
+      return (
+        season ||
+        year ||
+        value.semesterCode ||
+        value.code ||
+        value.semesterId ||
+        ""
+      );
+    }
+    return String(value);
+  };
+  const getInvitationSemester = (inv) =>
+    formatSemesterValue(
+      inv.semesterLabel ||
+        inv.semesterName ||
+        inv.semesterCode ||
+        inv.semester ||
+        inv.semesterId
+    ) ||
+    formatSemesterValue(inv.semester);
+  const formatSemesterLabel = (value) =>
+    formatSemesterValue(value) || t("updating") || "Updating";
+  const getInvitationMembers = (inv) => ({
+    current: inv.currentMembers ?? inv.memberCount ?? 0,
+    max: inv.maxMembers ?? inv.capacity ?? 0,
+  });
+  const getInvitationSkills = (inv) => {
+    const skills = [
+      ...(Array.isArray(inv.skills) ? inv.skills : []),
+      ...(Array.isArray(inv.topicSkills) ? inv.topicSkills : []),
+    ];
+    return Array.from(new Set(skills));
+  };
+
   const filteredInvitations = invitations.filter((inv) => {
     const status = normalizeStatus(inv.status);
     if (activeTab === "all") return true;
@@ -151,11 +284,14 @@ const Invitations = () => {
         invitation.groupName || t("groupUnnamed") || "Unnamed group",
       topic:
         invitation.topicTitle || t("topicUndefined") || "Topic not set",
+      topicDescription:
+        invitation.topicDescription || invitation.topic?.description || "",
       description: invitation.description || "",
       members: invitation.currentMembers || 0,
       maxMembers: invitation.maxMembers || 0,
       skills: invitation.skills || [],
       topicSkills: invitation.topicSkills || [],
+      semesterLabel: formatSemesterLabel(getInvitationSemester(invitation)),
     });
     setGroupMembers([]);
     setGroupDetailModalVisible(true);
@@ -178,11 +314,22 @@ const Invitations = () => {
           invitation.topicTitle ||
           t("topicUndefined") ||
           "Topic not set",
+        topicDescription:
+          g.topic?.description || invitation.topicDescription || "",
         description: g.description || "",
         members: g.currentMembers || g.memberCount || 0,
         maxMembers: g.maxMembers || g.capacity || 0,
         skills: Array.isArray(g.skills) ? g.skills : [],
         topicSkills: Array.isArray(g.topic?.skills) ? g.topic.skills : [],
+        semesterLabel: formatSemesterLabel(
+          g.semester?.name ||
+            g.semester?.semesterName ||
+            g.semester?.code ||
+            g.semester?.semesterCode ||
+            g.semesterLabel ||
+            g.semester ||
+            getInvitationSemester(invitation)
+        ),
       });
     } catch {
       setSelectedGroup((prev) => prev || null);
@@ -285,98 +432,135 @@ const Invitations = () => {
             {t("noInvitations") || "No invitations yet."}
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredInvitations.map((inv) => (
-              <div
-                key={inv.id}
-                className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:shadow-md transition cursor-pointer"
-                onClick={() => openGroupDetailModal(inv)}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-gray-900">
-                        {inv.groupName || t("groupUnnamed") || "Unnamed group"}
-                      </h3>
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${
-                          normalizeStatus(inv.status) === "accepted"
-                            ? "bg-green-50 text-green-600 border border-green-200"
-                            : normalizeStatus(inv.status) === "pending"
-                            ? "bg-yellow-50 text-yellow-600 border border-yellow-200"
-                            : isRejectedStatus(inv.status)
-                            ? "bg-red-50 text-red-600 border border-red-200"
-                            : "bg-gray-50 text-gray-600 border border-gray-200"
-                        }`}
-                      >
-                        {normalizeStatus(inv.status) === "accepted"
-                          ? t("accepted") || "Accepted"
-                          : normalizeStatus(inv.status) === "pending"
-                          ? t("pending") || "Pending"
-                          : isRejectedStatus(inv.status)
-                          ? t("rejected") || "Rejected"
-                          : inv.status}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {filteredInvitations.map((inv) => {
+              const members = getInvitationMembers(inv);
+              const semesterLabel = formatSemesterLabel(
+                getInvitationSemester(inv)
+              );
+              const groupTitle =
+                inv.groupName || t("groupUnnamed") || "Unnamed group";
+              return (
+                <div
+                  key={inv.id}
+                  className="bg-white rounded-2xl p-5 border border-emerald-200 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center text-sm font-semibold">
+                        {(groupTitle || "T").charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-gray-900">
+                            {groupTitle}
+                          </h3>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${
+                              normalizeStatus(inv.status) === "accepted"
+                                ? "bg-green-50 text-green-600 border border-green-200"
+                                : normalizeStatus(inv.status) === "pending"
+                                ? "bg-yellow-50 text-yellow-600 border border-yellow-200"
+                                : isRejectedStatus(inv.status)
+                                ? "bg-red-50 text-red-600 border border-red-200"
+                                : "bg-gray-50 text-gray-600 border border-gray-200"
+                            }`}
+                          >
+                            {normalizeStatus(inv.status) === "accepted"
+                              ? t("accepted") || "Accepted"
+                              : normalizeStatus(inv.status) === "pending"
+                              ? t("pending") || "Pending"
+                              : isRejectedStatus(inv.status)
+                              ? t("rejected") || "Rejected"
+                              : inv.status}
+                          </span>
+                        </div>
+                        {inv.createdAt && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {getRelativeTime(inv.createdAt)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openGroupDetailModal(inv)}
+                      className="text-sm font-medium text-emerald-600 hover:text-emerald-700 inline-flex items-center gap-1"
+                    >
+                      {t("details") || "Details"}
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-4">
+                    <p className="text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
+                      {t("topic") || "Topic"}
+                    </p>
+                    <p className="mt-1 text-gray-900">
+                      {getInvitationTopic(inv)}
+                    </p>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-gray-400" />
+                      <span>
+                        {members.current}/{members.max || "-"}{" "}
+                        {t("thanh_vien") || "members"}
                       </span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <span>{semesterLabel}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-sm text-gray-600">
                     {inv.type === "mentor_request" ? (
-                      <p className="text-sm text-gray-600">
+                      <span>
                         {t("youSentMentorRequest") ||
-                          "You sent a mentor request for this group with the topic below."}
-                        {inv.topicTitle && (
-                          <>
-                            {" "}
-                            <span className="font-medium">
-                              {inv.topicTitle ||
-                                t("topicUndefined") ||
-                                "Topic not set"}
-                            </span>
-                          </>
-                        )}
-                      </p>
+                          "You sent a mentor request for this group."}
+                      </span>
                     ) : (
-                      <p className="text-sm text-gray-600">
+                      <span>
                         <span className="font-medium">
                           {inv.invitedByName || t("invitedBy") || "Invited by"}
                         </span>{" "}
                         {t("invitedYouToMentorGroup") ||
-                          "invited you to mentor the group for"}{" "}
-                        <span className="font-medium">
-                          {inv.topicTitle ||
-                            t("topicUndefined") ||
-                            "Topic not set"}
-                        </span>
-                      </p>
-                    )}
-
-                    {inv.message && (
-                      <p className="mt-2 text-sm text-gray-700 bg-white border border-blue-100 rounded-lg px-3 py-2 shadow-sm">
-                        <span className="text-xs uppercase tracking-wide text-blue-500 font-semibold">
-                          {t("message") || "Message"}
-                        </span>
-                        <br />
-                        <span className="italic break-words">{inv.message}</span>
-                      </p>
-                    )}
-
-                    {inv.createdAt && (
-                      <p className="text-xs text-gray-500 mt-1">
-                        {getRelativeTime(inv.createdAt)}
-                      </p>
+                          "invited you to mentor the group"}
+                      </span>
                     )}
                   </div>
+
+                  {inv.message && (
+                    <div className="mt-3 text-sm text-gray-700 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+                      <span className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+                        {t("message") || "Message"}
+                      </span>
+                      <div className="mt-1 italic break-words">
+                        {inv.message}
+                      </div>
+                    </div>
+                  )}
+
                   {normalizeStatus(inv.status) === "pending" &&
                     inv.type !== "mentor_request" && (
-                    <div className="flex items-center gap-2">
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleAcceptInvitation(inv);
                         }}
-                        disabled={acceptingInvitationId === (inv.invitationId || inv.id) || rejectingInvitationId === (inv.invitationId || inv.id)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={
+                          acceptingInvitationId ===
+                            (inv.invitationId || inv.id) ||
+                          rejectingInvitationId === (inv.invitationId || inv.id)
+                        }
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {acceptingInvitationId === (inv.invitationId || inv.id) ? (
+                        {acceptingInvitationId ===
+                        (inv.invitationId || inv.id) ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <Check className="w-4 h-4" />
@@ -389,10 +573,15 @@ const Invitations = () => {
                           e.stopPropagation();
                           handleRejectInvitation(inv);
                         }}
-                        disabled={rejectingInvitationId === (inv.invitationId || inv.id) || acceptingInvitationId === (inv.invitationId || inv.id)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={
+                          rejectingInvitationId ===
+                            (inv.invitationId || inv.id) ||
+                          acceptingInvitationId === (inv.invitationId || inv.id)
+                        }
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {rejectingInvitationId === (inv.invitationId || inv.id) ? (
+                        {rejectingInvitationId ===
+                        (inv.invitationId || inv.id) ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
                           <X className="w-4 h-4" />
@@ -402,8 +591,8 @@ const Invitations = () => {
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -438,6 +627,14 @@ const Invitations = () => {
                     {selectedGroup.maxMembers || 0}{" "}
                     {t("thanh_vien") || "members"}
                   </p>
+                  <div className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>
+                      {selectedGroup.semesterLabel ||
+                        t("updating") ||
+                        "Updating"}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -452,6 +649,11 @@ const Invitations = () => {
                     <p className="mt-1 text-gray-900">
                       {selectedGroup.topic}
                     </p>
+                    {selectedGroup.topicDescription && (
+                      <p className="mt-2 text-sm text-gray-700">
+                        {selectedGroup.topicDescription}
+                      </p>
+                    )}
                   </div>
                 )}
 
