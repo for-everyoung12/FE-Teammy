@@ -13,6 +13,8 @@ import { InvitationService } from "../../services/invitation.service";
 import { useTranslation } from "../../hook/useTranslation";
 import { GroupService } from "../../services/group.service";
 import { TopicService } from "../../services/topic.service";
+import { SemesterService } from "../../services/semester.service";
+import { MajorService } from "../../services/major.service";
 import { useNavigate } from "react-router-dom";
 
 const Invitations = () => {
@@ -22,6 +24,11 @@ const Invitations = () => {
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("all");
+  const [selectedSemesterId, setSelectedSemesterId] = useState("all");
+  const [selectedMajorId, setSelectedMajorId] = useState("all");
+  const [semesterOptions, setSemesterOptions] = useState([]);
+  const [majorOptions, setMajorOptions] = useState([]);
+  const [filtersLoading, setFiltersLoading] = useState(false);
   const [acceptingInvitationId, setAcceptingInvitationId] = useState(null);
   const [rejectingInvitationId, setRejectingInvitationId] = useState(null);
   const [groupDetailModalVisible, setGroupDetailModalVisible] = useState(false);
@@ -32,6 +39,61 @@ const Invitations = () => {
 
   useEffect(() => {
     fetchInvitations();
+  }, []);
+
+  useEffect(() => {
+    const fetchFilters = async () => {
+      setFiltersLoading(true);
+      try {
+        const [semesterRes, majorRes] = await Promise.all([
+          SemesterService.list(),
+          MajorService.getMajors(),
+        ]);
+        const semesterPayload = semesterRes?.data ?? semesterRes;
+        const semesterList = Array.isArray(semesterPayload?.data)
+          ? semesterPayload.data
+          : Array.isArray(semesterPayload)
+          ? semesterPayload
+          : semesterPayload?.items || [];
+        const majorPayload = majorRes?.data ?? majorRes;
+        const majorList = Array.isArray(majorPayload?.data)
+          ? majorPayload.data
+          : Array.isArray(majorPayload)
+          ? majorPayload
+          : majorPayload?.items || [];
+
+        setSemesterOptions(
+          semesterList
+            .map((item) => ({
+              id: item.id || item.semesterId || item._id,
+              label: formatSemesterLabel(item),
+            }))
+            .filter(
+              (item) =>
+                item.id &&
+                item.label &&
+                normalizeStatus(item.label) !==
+                  normalizeStatus(t("updating") || "Updating")
+            )
+        );
+
+        setMajorOptions(
+          majorList
+            .map((item) => ({
+              id: item.id || item.majorId || item._id,
+              label: item.name || item.title || item.majorName || "",
+            }))
+            .filter((item) => item.id && item.label)
+        );
+      } catch {
+        setSemesterOptions([]);
+        setMajorOptions([]);
+      } finally {
+        setFiltersLoading(false);
+      }
+    };
+
+    fetchFilters();
   }, []);
 
   const fetchInvitations = async () => {
@@ -235,8 +297,18 @@ const Invitations = () => {
         inv.semesterId
     ) ||
     formatSemesterValue(inv.semester);
+  const getInvitationSemesterId = (inv) =>
+    inv.semesterId ||
+    inv.semester?.id ||
+    inv.semester?.semesterId ||
+    inv.semester?.semester_id ||
+    "";
   const formatSemesterLabel = (value) =>
     formatSemesterValue(value) || t("updating") || "Updating";
+  const getInvitationMajorId = (inv) =>
+    inv.majorId || inv.major?.id || inv.major?.majorId || "";
+  const getInvitationMajorName = (inv) =>
+    inv.majorName || inv.major?.name || inv.major?.title || "";
   const getInvitationMembers = (inv) => ({
     current: inv.currentMembers ?? inv.memberCount ?? 0,
     max: inv.maxMembers ?? inv.capacity ?? 0,
@@ -251,12 +323,50 @@ const Invitations = () => {
 
   const filteredInvitations = invitations.filter((inv) => {
     const status = normalizeStatus(inv.status);
-    if (activeTab === "all") return true;
-    if (activeTab === "pending") return status === "pending";
-    if (activeTab === "accepted") return status === "accepted";
-    if (activeTab === "rejected") return isRejectedStatus(status);
+    if (activeTab !== "all") {
+      if (activeTab === "pending" && status !== "pending") return false;
+      if (activeTab === "accepted" && status !== "accepted") return false;
+      if (activeTab === "rejected" && !isRejectedStatus(status)) return false;
+    }
+    if (selectedSemesterId !== "all") {
+      const semesterId = getInvitationSemesterId(inv);
+      if (String(semesterId) !== String(selectedSemesterId)) return false;
+    }
+    if (selectedMajorId !== "all") {
+      const majorId = getInvitationMajorId(inv);
+      if (String(majorId) !== String(selectedMajorId)) return false;
+    }
     return true;
   });
+
+  const derivedSemesterOptions = Array.from(
+    new Map(
+      invitations
+        .map((inv) => ({
+          id: getInvitationSemesterId(inv),
+          label: formatSemesterLabel(getInvitationSemester(inv)),
+        }))
+        .filter((item) => item.id)
+        .map((item) => [String(item.id), item])
+    ).values()
+  );
+
+  const derivedMajorOptions = Array.from(
+    new Map(
+      invitations
+        .map((inv) => ({
+          id: getInvitationMajorId(inv),
+          label: getInvitationMajorName(inv),
+        }))
+        .filter((item) => item.id && item.label)
+        .map((item) => [String(item.id), item])
+    ).values()
+  );
+
+  const semesterOptionsToShow =
+    semesterOptions.length > 0 ? semesterOptions : derivedSemesterOptions;
+  const majorOptionsToShow =
+    majorOptions.length > 0 ? majorOptions : derivedMajorOptions;
 
   const pendingCount = invitations.filter(
     (inv) => normalizeStatus(inv.status) === "pending"
@@ -362,10 +472,6 @@ const Invitations = () => {
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-black">
           {t("mentoringInvitations") || "Mentoring Invitations"}
         </h1>
-        <p className="text-gray-600">
-          {t("mentorInvitations") ||
-            "Review invitations and decide whether to mentor these groups."}
-        </p>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -421,6 +527,44 @@ const Invitations = () => {
           >
             {t("rejected") || "Rejected"} ({rejectedCount})
           </button>
+        </div>
+        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+          <label className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {t("semester") || "Semester"}
+            </span>
+            <select
+              value={selectedSemesterId}
+              onChange={(e) => setSelectedSemesterId(e.target.value)}
+              disabled={filtersLoading}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="all">{t("all") || "All"}</option>
+              {semesterOptionsToShow.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {t("major") || "Major"}
+            </span>
+            <select
+              value={selectedMajorId}
+              onChange={(e) => setSelectedMajorId(e.target.value)}
+              disabled={filtersLoading}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="all">{t("all") || "All"}</option>
+              {majorOptionsToShow.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         {loading ? (

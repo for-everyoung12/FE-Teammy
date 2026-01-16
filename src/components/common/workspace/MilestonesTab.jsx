@@ -815,6 +815,38 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
                     </div>
                   )}
 
+                  {Array.isArray(overdueActions.tasksDueAfter) &&
+                    overdueActions.tasksDueAfter.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-gray-600">
+                        {t("tasksDueAfterMilestone") || "Items due after milestone"}
+                      </p>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden text-xs">
+                        <div className="grid grid-cols-3 gap-2 bg-gray-50 px-3 py-2 font-semibold text-gray-600">
+                          <span>{t("title") || "Title"}</span>
+                          <span>{t("dueDate") || "Due date"}</span>
+                          <span>{t("column") || "Column"}</span>
+                        </div>
+                        {overdueActions.tasksDueAfter.map((item) => (
+                          <div
+                            key={item.backlogItemId || item.title}
+                            className="grid grid-cols-3 gap-2 px-3 py-2 border-t border-gray-100"
+                          >
+                            <span className="text-gray-900">
+                              {item.title || t("untitled") || "Untitled"}
+                            </span>
+                            <span className="text-gray-600">
+                              {formatDate(item.dueDate)}
+                            </span>
+                            <span className="text-gray-600">
+                              {item.columnName || "--"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-2 border-t border-amber-100 pt-3">
                     <label className="text-sm text-gray-700 mb-1 block">
                       {t("newTargetDate") || "New target date"}

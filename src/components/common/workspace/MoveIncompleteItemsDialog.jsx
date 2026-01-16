@@ -70,7 +70,7 @@ export default function MoveIncompleteItemsDialog({
       )
       .map((m) => ({
         value: m.milestoneId || m.id,
-        label: `${m.name || "Milestone"} · ${m.targetDate || "--"}`,
+        label: `${m.name || "Milestone"} - ${m.targetDate || "--"}`,
       }));
   }, [milestones, currentMilestoneId]);
 
@@ -106,6 +106,7 @@ export default function MoveIncompleteItemsDialog({
         });
       } else {
         await MilestoneService.moveMilestoneItems(groupId, milestoneId, {
+          targetMilestoneId: null,
           createNewMilestone: true,
           newMilestoneName: newMilestoneName.trim(),
           newMilestoneTargetDate: dayjs(newMilestoneTargetDate).format(
@@ -226,3 +227,5 @@ export default function MoveIncompleteItemsDialog({
     </Modal>
   );
 }
+
+
