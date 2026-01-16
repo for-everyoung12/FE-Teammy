@@ -525,6 +525,8 @@ export const translations = {
     // Mentor Pages
     groupId: "Group #",
     timelineTasks: "Timeline & Tasks",
+    newest: "Newest",
+    oldest: "Oldest",
     contributionsChat: "Contributions & Chat",
     contributions: "Contributions",
 
@@ -2061,7 +2063,7 @@ export const translations = {
     topicRequirement: "Chỉ chọn đề tài khi nhóm đủ thành viên.",
     inviteMembers: "Mời thành viên",
     inviteDisabledSemesterStart:
-      "Kh�ng th? m?i th�nh vi�n v�o ng�y b?t d?u h?c k?.",
+      "Không thể thêm thành viên vào ngày bắt đầu học kì.",
     members: "Thành viên",
     Members: "Thành Viên",
     totalMembers: "Tổng",
@@ -2234,6 +2236,8 @@ export const translations = {
     // Mentor Pages
     groupId: "Nhóm #",
     timelineTasks: "Timeline & Nhiệm Vụ",
+    newest: "Mới nhất",
+    oldest: "Cũ nhất",
     contributionsChat: "Đóng Góp & Trò Chuyện",
     contributions: "Mức Độ Đóng Góp",
 
@@ -2899,6 +2903,7 @@ export const translations = {
 export const getTranslation = (key, language = "VIE") => {
   return translations[language]?.[key] || key;
 };
+
 
 
 

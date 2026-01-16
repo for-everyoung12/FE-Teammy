@@ -34,6 +34,7 @@ import BacklogTab from "../../components/common/workspace/BacklogTab";
 import MilestonesTab from "../../components/common/workspace/MilestonesTab";
 import ReportsTab from "../../components/common/workspace/ReportsTab";
 import ListView from "../../components/common/workspace/ListView";
+import TimelineTab from "../../components/common/workspace/TimelineTab";
 import { Pagination } from "../../components/common/forum/Pagination";
 import { useGroupActivation } from "../../hook/useGroupActivation";
 import { useGroupDetail } from "../../hook/useGroupDetail";
@@ -1096,7 +1097,7 @@ export default function MyGroup() {
                   <div>
                     <h3 className="text-xl font-semibold text-gray-900">
                       {t("mentorInvitationsTab") || "Mentor invitations"}
-                    </h3>
+                    </h3> 
                     <p className="text-sm text-gray-500">
                       {t("mentorInvitationsEmpty") ||
                         "Review mentor invitations sent to your group."}
@@ -1333,6 +1334,18 @@ export default function MyGroup() {
                       (t("milestones") || "Milestones").slice(1)}
                   </button>
                   <button
+                    onClick={() => setActiveWorkspaceTab("timeline")}
+                    className={`flex items-center gap-2 px-4 py-2 font-medium text-sm whitespace-nowrap transition-colors ${
+                      activeWorkspaceTab === "timeline"
+                        ? "text-blue-600 border-b-2 border-blue-600"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    <Calendar className="w-4 h-4" />
+                    {(t("timelineTasks") || "Timeline").charAt(0).toUpperCase() +
+                      (t("timelineTasks") || "Timeline").slice(1)}
+                  </button>
+                  <button
                     onClick={() => setActiveWorkspaceTab("reports")}
                     className={`flex items-center gap-2 px-4 py-2 font-medium text-sm whitespace-nowrap transition-colors ${
                       activeWorkspaceTab === "reports"
@@ -1450,6 +1463,11 @@ export default function MyGroup() {
                     readOnly={isReadOnly}
                     groupStatus={groupStatus}
                   />
+                )}
+
+                {/* TIMELINE SUB-TAB */}
+                {activeWorkspaceTab === "timeline" && (
+                  <TimelineTab groupId={id} t={t} />
                 )}
 
                 {/* REPORTS SUB-TAB */}
