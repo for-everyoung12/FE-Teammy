@@ -6,6 +6,7 @@ import { Calendar, MessageSquare, MoreVertical, Trash2 } from "lucide-react";
 import { priorityStyles, initials } from "../../../utils/kanbanHelpers";
 import { Modal, Input, notification } from "antd";
 import { useTranslation } from "../../../hook/useTranslation";
+import dayjs from "dayjs";
 
 const getAssigneeId = (assignee) => {
   if (!assignee) return "";
@@ -52,6 +53,12 @@ const formatColumnName = (name) => {
     .split("_")
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+};
+
+const isDoneStatus = (value) => {
+  if (!value) return false;
+  const normalized = value.toString().trim().toLowerCase();
+  return normalized === "done" || normalized === "completed";
 };
 
 const TaskCard = ({ task, onOpen, onDelete, columnMeta = {} }) => {
@@ -108,6 +115,12 @@ const TaskCard = ({ task, onOpen, onDelete, columnMeta = {} }) => {
   const dueLabel = task.dueDate
     ? new Date(task.dueDate).toLocaleDateString()
     : "--";
+  const isOverdue =
+    task?.dueDate &&
+    dayjs(task.dueDate).isValid() &&
+    dayjs(task.dueDate).isBefore(dayjs().startOf("day")) &&
+    !columnMeta[task.columnId]?.isDone &&
+    !isDoneStatus(task.status);
   const commentsCount = Array.isArray(task.comments) ? task.comments.length : 0;
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -223,6 +236,11 @@ const TaskCard = ({ task, onOpen, onDelete, columnMeta = {} }) => {
               task.status
           )}
         </span>
+        {isOverdue && (
+          <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
+            {t("overdue") || "Overdue"}
+          </span>
+        )}
       </div>
 
       {/* Due Date và Assignees */}
