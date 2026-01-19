@@ -1,4 +1,5 @@
 import React from "react";
+import dayjs from "dayjs";
 
 const formatStatus = (value = "") =>
   value
@@ -28,21 +29,32 @@ const getInitials = (name = "") => {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 };
 
+const isDoneStatus = (value) => {
+  if (!value) return false;
+  const normalized = value.toString().trim().toLowerCase();
+  return normalized === "done" || normalized === "completed";
+};
+
 export default function ListView({
   tasks = [],
   columnMeta = {},
   onOpenTask,
   onCreateTask,
+  pageSize,
   t,
 }) {
-  const empty = !tasks || tasks.length === 0;
+  const visibleTasks =
+    Number.isFinite(Number(pageSize)) && Number(pageSize) > 0
+      ? tasks.slice(0, Number(pageSize))
+      : tasks;
+  const empty = !visibleTasks || visibleTasks.length === 0;
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <div>
           <p className="text-sm font-semibold text-gray-900">{t?.("listView") || "List view"}</p>
-          <p className="text-xs text-gray-500">{tasks.length} {t?.("tasks") || "tasks"}</p>
+          <p className="text-xs text-gray-500">{visibleTasks.length} {t?.("tasks") || "tasks"}</p>
         </div>
         <button
           type="button"
@@ -71,13 +83,19 @@ export default function ListView({
               <div className="px-4 py-3 text-right">Comments</div>
             </div>
 
-            {tasks.map((task) => {
+            {visibleTasks.map((task) => {
               const priorityKey = (task.priority || "").toLowerCase();
               const statusLabel =
                 columnMeta?.[task.columnId]?.title ||
                 formatStatus(task.status || "") ||
                 "—";
               const commentsCount = task.comments?.length || 0;
+              const isOverdue =
+                task?.dueDate &&
+                dayjs(task.dueDate).isValid() &&
+                dayjs(task.dueDate).isBefore(dayjs().startOf("day")) &&
+                !columnMeta?.[task.columnId]?.isDone &&
+                !isDoneStatus(task.status);
 
               return (
                 <div
@@ -145,7 +163,14 @@ export default function ListView({
                   </div>
 
                   <div className="px-4 py-3 text-sm text-gray-700">
-                    {formatDate(task.dueDate)}
+                    <div className="flex items-center gap-2">
+                      <span>{formatDate(task.dueDate)}</span>
+                      {isOverdue && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
+                          {t?.("overdue") || "Overdue"}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="px-4 py-3 text-right text-sm text-gray-700">
@@ -160,3 +185,5 @@ export default function ListView({
     </div>
   );
 }
+
+
