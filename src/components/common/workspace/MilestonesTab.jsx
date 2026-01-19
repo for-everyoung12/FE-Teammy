@@ -586,6 +586,11 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
                                 bi.targetDate ||
                                 bi.endDate ||
                                 null;
+                              const isOverdue =
+                                dueDateValue &&
+                                dayjs(dueDateValue).isValid() &&
+                                dayjs(dueDateValue).isBefore(dayjs().startOf("day")) &&
+                                !done;
                               return (
                                 <li
                                   key={backlogId}
@@ -605,9 +610,16 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
                                     {formatDate(dueDateValue)}
                                   </span>
                                   <div className="col-span-3 flex items-center justify-between gap-2">
-                                    <span className="text-gray-600">
-                                      {bi.status || "--"}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-600">
+                                        {bi.status || "--"}
+                                      </span>
+                                      {isOverdue && (
+                                        <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
+                                          {t("overdue") || "Overdue"}
+                                        </span>
+                                      )}
+                                    </div>
                                     {!readOnly && (
                                       <Button
                                         size="small"

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "../../hook/useTranslation";
 import { useAuth } from "../../context/AuthContext";
@@ -373,7 +373,9 @@ export default function MyGroup() {
         payload?.total ||
         payload?.totalCount ||
         items.length;
-      return { items, total, fromColumns: true };
+      const totalNumber = Number(total) || items.length;
+      const isServerPaged = totalNumber > items.length;
+      return { items, total: totalNumber, fromColumns: true, isServerPaged };
     }
     const items = Array.isArray(payload)
       ? payload
@@ -394,7 +396,9 @@ export default function MyGroup() {
       payload?.page?.totalItems ||
       payload?.meta?.total ||
       items.length;
-    return { items, total, fromColumns: false };
+    const totalNumber = Number(total) || items.length;
+    const isServerPaged = totalNumber > items.length;
+    return { items, total: totalNumber, fromColumns: false, isServerPaged };
   };
   const tasks =
     board?.columns?.flatMap((col) => col.tasks || [])?.filter(Boolean) || [];
@@ -414,11 +418,18 @@ export default function MyGroup() {
       .map((task) => normalizeListTask(task))
       .filter(Boolean);
   }, [listViewRawTasks, kanbanMembers]);
-  const listViewFilteredTasks = useMemo(() => {
+  const listViewAllTasks = useMemo(() => {
+    return Object.entries(columns || {}).flatMap(([colId, tasksInCol]) =>
+      (tasksInCol || [])
+        .map((task) => normalizeListTask({ ...task, columnId: colId }))
+        .filter(Boolean)
+    );
+  }, [columns, kanbanMembers]);
+  const filterListViewTasks = useCallback((tasks) => {
     const normalizeStatusKey = (value = "") =>
       value.toString().toLowerCase().replace(/[\s_]+/g, "");
     const statusFilterKey = normalizeStatusKey(listFilterStatus);
-    return listViewTasks.filter((task) => {
+    return tasks.filter((task) => {
       const effectiveStatus = normalizeStatusKey(
         columnMeta?.[task.columnId]?.title || task.status || task.columnId || ""
       );
@@ -427,14 +438,25 @@ export default function MyGroup() {
         effectiveStatus === statusFilterKey
       );
     });
-  }, [listViewTasks, listFilterStatus, columnMeta]);
+  }, [listFilterStatus, columnMeta]);
+  const listViewFilteredTasks = useMemo(() => {
+    return filterListViewTasks(listViewTasks);
+  }, [listViewTasks, filterListViewTasks]);
+  const listViewFallbackFiltered = useMemo(() => {
+    return filterListViewTasks(listViewAllTasks);
+  }, [listViewAllTasks, filterListViewTasks]);
   const listViewTotalForPager = useMemo(() => {
     return listViewIsServerPaged
       ? listViewTotal
       : listViewFilteredTasks.length;
   }, [listViewIsServerPaged, listViewTotal, listViewFilteredTasks]);
   const listViewPagedTasks = useMemo(() => {
-    if (listViewIsServerPaged) return listViewFilteredTasks;
+    if (listViewIsServerPaged) {
+      if (listViewFilteredTasks.length <= listViewPageSize) {
+        return listViewFilteredTasks;
+      }
+      return listViewFilteredTasks.slice(0, listViewPageSize);
+    }
     const start = Math.max(0, (listViewPage - 1) * listViewPageSize);
     const end = start + listViewPageSize;
     return listViewFilteredTasks.slice(start, end);
@@ -488,12 +510,16 @@ export default function MyGroup() {
         const apiStatus = toApiStatusFilter(listFilterStatus);
         if (apiStatus) params.status = apiStatus;
         const res = await BoardService.getBoard(id, params);
-        const { items, total, fromColumns } = parseListResponse(res);
+        const { items, total } = parseListResponse(res);
+        const fallbackTotal = listViewFallbackFiltered.length;
+        const totalNumber = Number.isFinite(Number(total)) ? Number(total) : 0;
+        const resolvedTotal =
+          totalNumber > items.length
+            ? totalNumber
+            : Math.max(items.length, fallbackTotal);
         setListViewRawTasks(items);
-        setListViewTotal(
-          Number.isFinite(Number(total)) ? Number(total) : items.length
-        );
-        setListViewIsServerPaged(!fromColumns);
+        setListViewTotal(resolvedTotal);
+        setListViewIsServerPaged(resolvedTotal > items.length);
       } catch (err) {
         setListViewError(t("failedLoadTasks") || "Failed to load tasks.");
         setListViewRawTasks([]);
@@ -510,6 +536,7 @@ export default function MyGroup() {
     listViewPage,
     listViewPageSize,
     listFilterStatus,
+    listViewFallbackFiltered.length,
   ]);
 
   const recentActivity = tasks
@@ -1413,6 +1440,14 @@ export default function MyGroup() {
                           {listViewTotalForPager} tasks
                         </div>
                       </div>
+                      <Pagination
+                        page={listViewPage}
+                        setPage={setListViewPage}
+                        pageSize={listViewPageSize}
+                        setPageSize={setListViewPageSize}
+                        total={listViewTotalForPager}
+                        showPager={false}
+                      />
                       {listViewLoading ? (
                         <div className="text-sm text-gray-500">
                           {t("loading") || "Loading..."}
@@ -1422,23 +1457,27 @@ export default function MyGroup() {
                           {listViewError}
                         </div>
                       ) : (
-                        <ListView
-                          tasks={listViewPagedTasks}
-                          columnMeta={columnMeta}
-                          onOpenTask={handleOpenListTask}
-                          onCreateTask={
-                            isReadOnly ? undefined : handleQuickCreateTask
-                          }
-                          t={t}
-                        />
+                        <>
+                          <ListView
+                            tasks={listViewPagedTasks}
+                            columnMeta={columnMeta}
+                            onOpenTask={handleOpenListTask}
+                            onCreateTask={
+                              isReadOnly ? undefined : handleQuickCreateTask
+                            }
+                            pageSize={listViewPageSize}
+                            t={t}
+                          />
+                          <Pagination
+                            page={listViewPage}
+                            setPage={setListViewPage}
+                            pageSize={listViewPageSize}
+                            setPageSize={setListViewPageSize}
+                            total={listViewTotalForPager}
+                            showPageSize={false}
+                          />
+                        </>
                       )}
-                      <Pagination
-                        page={listViewPage}
-                        setPage={setListViewPage}
-                        pageSize={listViewPageSize}
-                        setPageSize={setListViewPageSize}
-                        total={listViewTotalForPager}
-                      />
                     </div>
                   )}
 

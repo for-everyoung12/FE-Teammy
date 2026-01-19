@@ -1,4 +1,12 @@
-export function Pagination({ page, setPage, pageSize, setPageSize, total }) {
+export function Pagination({
+  page,
+  setPage,
+  pageSize,
+  setPageSize,
+  total,
+  showPageSize = true,
+  showPager = true,
+}) {
   const maxPage = Math.max(1, Math.ceil(total / pageSize));
 
   const pageNumbers = Array.from({ length: maxPage }, (_, i) => i + 1)
@@ -16,19 +24,20 @@ export function Pagination({ page, setPage, pageSize, setPageSize, total }) {
       return acc;
     }, []);
 
-  if (total === 0) return null;
+  if (total === 0 || (!showPageSize && !showPager)) return null;
 
   return (
     <div className="mt-6 md:mt-8 mb-4 flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:gap-4">
       {/* Page size */}
-      <div className="flex items-center gap-2 text-xs md:text-sm text-gray-600">
+      {showPageSize && (
+        <div className="flex items-center gap-2 text-xs md:text-sm text-gray-600">
         <span>Show</span>
         <select
           value={pageSize}
           onChange={(e) => setPageSize(Number(e.target.value))}
           className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs md:text-sm"
         >
-          {[6, 9, 12, 18].map((n) => (
+          {[10, 50, 100].map((n) => (
             <option key={n} value={n}>
               {n}
             </option>
@@ -37,10 +46,12 @@ export function Pagination({ page, setPage, pageSize, setPageSize, total }) {
         <span className="hidden sm:inline">per page</span>
         <span className="text-gray-400 hidden sm:inline">•</span>
         <span className="hidden sm:inline">{total} results</span>
-      </div>
+        </div>
+      )}
 
       {/* Pager */}
-      <div className="inline-flex items-center gap-1">
+      {showPager && (
+        <div className="inline-flex items-center gap-1">
         <button
           onClick={() => setPage((p) => Math.max(1, p - 1))}
           disabled={page === 1}
@@ -76,7 +87,8 @@ export function Pagination({ page, setPage, pageSize, setPageSize, total }) {
         >
           Next
         </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
