@@ -58,7 +58,7 @@ export function AIRecommendedGroups({
               .map((p) => p.trim())
               .filter(Boolean)
           : [];
-        const skills = suggestion.matchingSkills || post.skills || [];
+        const matchingSkills = suggestion.matchingSkills || post.skills || [];
         const major = post.major || {};
         const createdAt = post.createdAt || new Date();
         const applicationDeadline = post.applicationDeadline || null;
@@ -68,6 +68,7 @@ export function AIRecommendedGroups({
         const leader = group.leader || {};
         const leaderName = leader.displayName || leader.name || "";
         const aiReason = suggestion.aiReason || "";
+        const requiredSkills = suggestion.requiredSkills || [];
         return (
           <div
             key={idx}
@@ -200,11 +201,11 @@ export function AIRecommendedGroups({
             </div>
 
             <div className="mt-4 space-y-4">
-              {skills && skills.length > 0 && (
+              {matchingSkills && matchingSkills.length > 0 ? (
                 <div className="text-xs font-semibold tracking-wide text-gray-800">
                   {(t("matchingSkills") || "Matching Skills") + ":"}
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {skills.map((skill, i) => (
+                    {matchingSkills.map((skill, i) => (
                       <Chip key={i}>
                         {typeof skill === "string"
                           ? skill
@@ -213,7 +214,20 @@ export function AIRecommendedGroups({
                     ))}
                   </div>
                 </div>
-              )}
+              ) : requiredSkills && requiredSkills.length > 0 ? (
+                <div className="text-xs font-semibold tracking-wide text-gray-800">
+                  {(t("requiredSkills") || "Required Skills") + ":"}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {requiredSkills.map((skill, i) => (
+                      <Chip key={i}>
+                        {typeof skill === "string"
+                          ? skill
+                          : skill.name || skill}
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-300">
