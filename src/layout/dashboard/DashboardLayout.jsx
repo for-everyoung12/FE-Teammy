@@ -1,10 +1,9 @@
 import React, { useState } from "react";
-import { Layout, Modal } from "antd";
+import { Layout } from "antd";
 import Sidebar from "./Sidebar";
 import HeaderBar from "./Header";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { useTranslation } from "../../hook/useTranslation";
 
 const { Content } = Layout;
 
@@ -12,23 +11,13 @@ const DashboardLayout = ({ role }) => {
   const [collapsed, setCollapsed] = useState(false);
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const { t } = useTranslation();
   const location = useLocation();
 
   const isMessagesPage = location.pathname.includes("/messages");
 
   const handleLogout = () => {
-    Modal.confirm({
-      title: t("confirmLogout") || "Confirm Logout",
-      content: t("confirmLogoutMessage") || "Are you sure you want to logout?",
-      okText: t("logout") || "Logout",
-      cancelText: t("cancel") || "Cancel",
-      okButtonProps: { danger: true },
-      onOk: () => {
-        logout();
-        navigate("/login");
-      },
-    });
+    logout();
+    navigate("/login");
   };
 
   return (

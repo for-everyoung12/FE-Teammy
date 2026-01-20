@@ -586,6 +586,11 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
                                 bi.targetDate ||
                                 bi.endDate ||
                                 null;
+                              const isOverdue =
+                                dueDateValue &&
+                                dayjs(dueDateValue).isValid() &&
+                                dayjs(dueDateValue).isBefore(dayjs().startOf("day")) &&
+                                !done;
                               return (
                                 <li
                                   key={backlogId}
@@ -605,9 +610,16 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
                                     {formatDate(dueDateValue)}
                                   </span>
                                   <div className="col-span-3 flex items-center justify-between gap-2">
-                                    <span className="text-gray-600">
-                                      {bi.status || "--"}
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-gray-600">
+                                        {bi.status || "--"}
+                                      </span>
+                                      {isOverdue && (
+                                        <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
+                                          {t("overdue") || "Overdue"}
+                                        </span>
+                                      )}
+                                    </div>
                                     {!readOnly && (
                                       <Button
                                         size="small"
@@ -805,6 +817,38 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
                             </span>
                             <span className="text-gray-600">
                               {item.status || "--"}
+                            </span>
+                            <span className="text-gray-600">
+                              {item.columnName || "--"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {Array.isArray(overdueActions.tasksDueAfter) &&
+                    overdueActions.tasksDueAfter.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-gray-600">
+                        {t("tasksDueAfterMilestone") || "Items due after milestone"}
+                      </p>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden text-xs">
+                        <div className="grid grid-cols-3 gap-2 bg-gray-50 px-3 py-2 font-semibold text-gray-600">
+                          <span>{t("title") || "Title"}</span>
+                          <span>{t("dueDate") || "Due date"}</span>
+                          <span>{t("column") || "Column"}</span>
+                        </div>
+                        {overdueActions.tasksDueAfter.map((item) => (
+                          <div
+                            key={item.backlogItemId || item.title}
+                            className="grid grid-cols-3 gap-2 px-3 py-2 border-t border-gray-100"
+                          >
+                            <span className="text-gray-900">
+                              {item.title || t("untitled") || "Untitled"}
+                            </span>
+                            <span className="text-gray-600">
+                              {formatDate(item.dueDate)}
                             </span>
                             <span className="text-gray-600">
                               {item.columnName || "--"}

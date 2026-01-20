@@ -334,7 +334,7 @@ export default function BacklogTab({
     return "bg-green-100 text-green-700";
   };
 
-  const statusTone = (item) => {
+const statusTone = (item) => {
     // Use columnMeta to determine if status is done
     const columnId = item?.columnId;
     const column = columnId ? columnMeta[columnId] : null;
@@ -360,8 +360,16 @@ export default function BacklogTab({
     }
     
     // Not in sprint yet - default gray
-    return "bg-gray-100 text-gray-700";
-  };
+  return "bg-gray-100 text-gray-700";
+};
+
+const isItemDone = (item, columnMeta = {}) => {
+  const status = normalizeKey(item?.status || "");
+  if (status === "done" || status === "completed") return true;
+  const columnId = item?.columnId;
+  if (columnId && columnMeta?.[columnId]?.isDone) return true;
+  return false;
+};
 
   const totalStoryPoints = useMemo(
     () =>
@@ -450,6 +458,11 @@ export default function BacklogTab({
         <div className="space-y-3">
           {visibleItems.map((item) => {
             const ownerId = item?.ownerUserId || item?.ownerId;
+            const isOverdue =
+              item?.dueDate &&
+              dayjs(item.dueDate).isValid() &&
+              dayjs(item.dueDate).isBefore(dayjs().startOf("day")) &&
+              !isItemDone(item, columnMeta);
             return (
               <div
                 key={getItemId(item)}
@@ -510,6 +523,11 @@ export default function BacklogTab({
                     >
                       {(item?.status || "todo").toUpperCase().replace(/_/g, " ")}
                     </span>
+                    {isOverdue && (
+                      <span className="text-xs px-2 py-1 rounded-full bg-red-100 text-red-700">
+                        {t("overdue") || "Overdue"}
+                      </span>
+                    )}
                     <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">
                       {t("dueDate") || "Due"}: {formatDate(item?.dueDate)}
                     </span>
