@@ -36,13 +36,14 @@ export default function AIAssistantModerator() {
     membersWithoutGroup: 0,
     groupsMissingMembers: 0,
   });
-  const [loading, setLoading] = useState(false);
+  const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+  const [loadingAutoAssign, setLoadingAutoAssign] = useState(false);
   const [aiOptionsData, setAiOptionsData] = useState(null);
   const [semesterList, setSemesterList] = useState([]);
   const [selectedSemesterId, setSelectedSemesterId] = useState(null);
   const itemsFoundText = (t("itemsFound") || "{count} items found").replace(
     "{count}",
-    analysisResults.length
+    analysisResults.length,
   );
   useEffect(() => {
     fetchSemesters();
@@ -62,9 +63,7 @@ export default function AIAssistantModerator() {
       const list = Array.isArray(payload) ? payload : [];
       setSemesterList(list);
       const active = list.find((s) => s?.isActive);
-      setSelectedSemesterId(
-        active?.semesterId || list[0]?.semesterId || null
-      );
+      setSelectedSemesterId(active?.semesterId || list[0]?.semesterId || null);
     } catch (error) {
       console.error("Failed to fetch semesters:", error);
       notification.error({
@@ -77,7 +76,7 @@ export default function AIAssistantModerator() {
 
   const fetchAiOptions = async (semesterId) => {
     try {
-      setLoading(true);
+      setLoadingAnalysis(true);
       const response = await AiService.getOptions({
         semesterId,
         section: "All",
@@ -117,7 +116,7 @@ export default function AIAssistantModerator() {
         placement: "topRight",
       });
     } finally {
-      setLoading(false);
+      setLoadingAnalysis(false);
     }
   };
 
@@ -204,12 +203,22 @@ export default function AIAssistantModerator() {
   };
 
   const runAnalysis = async () => {
+    if (!selectedSemesterId) {
+      notification.warning({
+        message: t("warning") || "Warning",
+        description:
+          t("pleaseSelectSemester") || "Please select a semester first",
+        placement: "topRight",
+      });
+      return;
+    }
+
     try {
-      setLoading(true);
+      setLoadingAnalysis(true);
 
       if (mode === "groupsAndMembers") {
         await AiService.autoAssignTeams({
-          semesterId: selectedSemesterId || aiOptionsData?.semesterId || null,
+          semesterId: selectedSemesterId,
           majorId: null,
           limit: null,
         });
@@ -237,7 +246,8 @@ export default function AIAssistantModerator() {
         });
       }
 
-      await fetchAiOptions();
+      // Cập nhật dữ liệu mới ngay sau khi chạy AI
+      await fetchAiOptions(selectedSemesterId);
     } catch (error) {
       console.error("Run analysis failed:", error);
       notification.error({
@@ -246,16 +256,26 @@ export default function AIAssistantModerator() {
         placement: "topRight",
       });
     } finally {
-      setLoading(false);
+      setLoadingAnalysis(false);
     }
   };
 
   const runAIAutoAssign = async () => {
+    if (!selectedSemesterId) {
+      notification.warning({
+        message: t("warning") || "Warning",
+        description:
+          t("pleaseSelectSemester") || "Please select a semester first",
+        placement: "topRight",
+      });
+      return;
+    }
+
     try {
-      setLoading(true);
+      setLoadingAutoAssign(true);
 
       await AiService.autoResolve({
-        semesterId: selectedSemesterId || aiOptionsData?.semesterId || null,
+        semesterId: selectedSemesterId,
         majorId: null,
       });
 
@@ -267,7 +287,8 @@ export default function AIAssistantModerator() {
         placement: "topRight",
       });
 
-      await fetchAiOptions();
+      // Cập nhật dữ liệu mới ngay sau khi chạy AI
+      await fetchAiOptions(selectedSemesterId);
     } catch (error) {
       console.error("Failed to run AI auto-resolve:", error);
       notification.error({
@@ -277,7 +298,7 @@ export default function AIAssistantModerator() {
         placement: "topRight",
       });
     } finally {
-      setLoading(false);
+      setLoadingAutoAssign(false);
     }
   };
 
@@ -410,7 +431,7 @@ export default function AIAssistantModerator() {
               size="large"
               className="!bg-blue-600 hover:!bg-blue-700 !shadow-md"
               onClick={runAnalysis}
-              loading={loading}
+              loading={loadingAnalysis}
             >
               {t("runAnalysis") || "Run Analysis"}
             </Button>
@@ -420,7 +441,7 @@ export default function AIAssistantModerator() {
               size="large"
               className="!bg-green-600 hover:!bg-green-700 !shadow-md"
               onClick={runAIAutoAssign}
-              loading={loading}
+              loading={loadingAutoAssign}
             >
               {t("runAIAutoAssign") || "Run AI Auto-Assign"}
             </Button>
@@ -585,7 +606,7 @@ export default function AIAssistantModerator() {
                                                 >
                                                   {skill}
                                                 </Tag>
-                                              )
+                                              ),
                                             )}
                                           </div>
                                         )}
