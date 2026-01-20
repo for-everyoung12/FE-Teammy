@@ -43,9 +43,7 @@ const ModeratorDashboard = () => {
       const list = Array.isArray(payload) ? payload : [];
       setSemesterList(list);
       const active = list.find((s) => s?.isActive);
-      setSelectedSemesterId(
-        active?.semesterId || list[0]?.semesterId || null
-      );
+      setSelectedSemesterId(active?.semesterId || list[0]?.semesterId || null);
     } catch {
       notification.error({
         message: t("error"),
@@ -142,7 +140,7 @@ const ModeratorDashboard = () => {
       render: (topic) => topic?.title || t("noTopic") || "No Topic",
     },
     {
-      title: t("mentor") || "Mentor",
+      title: t("mentors") || "Mentorswwww",
       dataIndex: "mentor",
       key: "mentor",
       render: (m) => m?.displayName || "N/A",
@@ -161,7 +159,7 @@ const ModeratorDashboard = () => {
 
         const map = {
           recruiting: {
-            badge: "processing",
+            badge: "warning",
             text: t("recruiting") || "Recruiting",
           },
           active: {
@@ -169,7 +167,7 @@ const ModeratorDashboard = () => {
             text: t("active") || "Active",
           },
           closed: {
-            badge: "default",
+            badge: "error",
             text: t("closed") || "Closed",
           },
         };
