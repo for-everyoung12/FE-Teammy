@@ -8,6 +8,7 @@ import {
   Divider,
   notification,
   Tooltip,
+  Spin,
 } from "antd";
 import {
   ThunderboltOutlined,
@@ -38,6 +39,7 @@ export default function AIAssistantModerator() {
   });
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [loadingAutoAssign, setLoadingAutoAssign] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
   const [aiOptionsData, setAiOptionsData] = useState(null);
   const [semesterList, setSemesterList] = useState([]);
   const [selectedSemesterId, setSelectedSemesterId] = useState(null);
@@ -81,7 +83,7 @@ export default function AIAssistantModerator() {
         semesterId,
         section: "All",
         page: 1,
-        pageSize: 20,
+        pageSize: "",
       });
 
       const data = response?.data?.data || response?.data;
@@ -232,6 +234,7 @@ export default function AIAssistantModerator() {
         });
       } else if (mode === "missingTopics") {
         await AiService.autoAssignTopic({
+          semesterId: selectedSemesterId,
           groupId: null,
           majorId: null,
           limitPerGroup: null,
@@ -246,8 +249,11 @@ export default function AIAssistantModerator() {
         });
       }
 
-      // Cập nhật dữ liệu mới ngay sau khi chạy AI
+      setLoadingAnalysis(false);
+
+      setLoadingData(true);
       await fetchAiOptions(selectedSemesterId);
+      setLoadingData(false);
     } catch (error) {
       console.error("Run analysis failed:", error);
       notification.error({
@@ -255,7 +261,6 @@ export default function AIAssistantModerator() {
         description: t("failedToRunAiAnalysis") || "Failed to run AI analysis",
         placement: "topRight",
       });
-    } finally {
       setLoadingAnalysis(false);
     }
   };
@@ -449,7 +454,15 @@ export default function AIAssistantModerator() {
         </div>
       </Card>
 
-      {analysisResults.length > 0 && (
+      {loadingData && (
+        <Card className="shadow-sm border border-gray-200">
+          <div className="flex items-center justify-center py-20">
+            <Spin size="large" tip={t("loadingData") || "Loading data..."} />
+          </div>
+        </Card>
+      )}
+
+      {!loadingData && analysisResults.length > 0 && (
         <Card className="shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-semibold text-gray-900 text-xl">
