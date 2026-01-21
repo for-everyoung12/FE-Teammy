@@ -116,7 +116,7 @@ export default function GroupManagement() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [t]);
 
   const columns = [
     {

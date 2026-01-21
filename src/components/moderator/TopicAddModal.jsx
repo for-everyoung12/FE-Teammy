@@ -29,19 +29,20 @@ const TopicAddModal = ({ open, onClose, onSuccess }) => {
     const emails = parseMentorEmails(value);
     if (emails.length === 0) return Promise.resolve();
     const invalid = emails.filter(
-      (email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+      (email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),
     );
     if (invalid.length === 0) return Promise.resolve();
     return Promise.reject(
       new Error(
-        t("invalidMentorEmails") || "Please enter valid mentor email addresses."
-      )
+        t("invalidMentorEmails") ||
+          "Please enter valid mentor email addresses.",
+      ),
     );
   };
 
   const activeSemester = useMemo(
     () => semesters.find((s) => s.isActive),
-    [semesters]
+    [semesters],
   );
 
   useEffect(() => {
@@ -83,7 +84,7 @@ const TopicAddModal = ({ open, onClose, onSuccess }) => {
       const values = await form.validateFields();
 
       const selectedSemester = semesters.find(
-        (s) => s.semesterId === values.semesterId
+        (s) => s.semesterId === values.semesterId,
       );
 
       if (!selectedSemester?.isActive) {
@@ -137,7 +138,7 @@ const TopicAddModal = ({ open, onClose, onSuccess }) => {
       if (values.registrationFile?.fileList?.[0]) {
         formData.append(
           "RegistrationFile",
-          values.registrationFile.fileList[0].originFileObj
+          values.registrationFile.fileList[0].originFileObj,
         );
       }
       await TopicService.createTopic(formData);

@@ -25,6 +25,7 @@ import {
 } from "@ant-design/icons";
 import { useTranslation } from "../../hook/useTranslation";
 import { AdminService } from "../../services/admin.service";
+import { SemesterService } from "../../services/semester.service";
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -54,17 +55,52 @@ export default function ModeratorNotifications() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [overview, setOverview] = useState(null);
+  const [semesterList, setSemesterList] = useState([]);
+  const [selectedSemesterId, setSelectedSemesterId] = useState(null);
 
   const [isDirty, setIsDirty] = useState(false);
 
   const savedUser = JSON.parse(localStorage.getItem("userInfo") || "{}");
 
   useEffect(() => {
+    const fetchSemesters = async () => {
+      try {
+        const res = await SemesterService.list();
+        const semesters = res?.data || [];
+        setSemesterList(semesters);
+
+        const activeSemester = semesters.find((s) => s.isActive);
+        if (activeSemester) {
+          setSelectedSemesterId(activeSemester.semesterId);
+        }
+      } catch (error) {
+        notification.error({
+          message: t("error") || "Error",
+          description:
+            error?.response?.data?.message ||
+            t("failedToFetchSemesters") ||
+            "Failed to fetch semesters",
+        });
+      }
+    };
+
+    fetchSemesters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     const fetchOverview = async () => {
+      if (!selectedSemesterId) {
+        setOverview(null);
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         const res = await AdminService.getPlanningOverview({
           majorId: savedUser?.majorId,
+          semesterId: selectedSemesterId,
         });
         setOverview(res?.data || null);
       } catch (error) {
@@ -80,9 +116,9 @@ export default function ModeratorNotifications() {
       }
     };
 
-    if (savedUser?.majorId) fetchOverview();
+    fetchOverview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedUser?.majorId]);
+  }, [selectedSemesterId, savedUser?.majorId]);
 
   const semesterObj = overview?.semester;
   const semesterId = semesterObj?.semesterId || overview?.semesterId;
@@ -160,7 +196,7 @@ export default function ModeratorNotifications() {
     const semesterLine =
       startDate && endDate
         ? `Semester period: ${formatDateDMY(startDate)} → ${formatDateDMY(
-            endDate
+            endDate,
           )}`
         : "";
 
@@ -262,7 +298,7 @@ Please make sure you are part of a team before the deadline.${closing}`,
 
   const toggleSelect = (id) => {
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
 
@@ -469,6 +505,25 @@ Please make sure you are part of a team before the deadline.${closing}`,
         <div className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <span className="text-sm font-medium text-slate-600 min-w-[140px]">
+              {t("semester") || "Semester"}
+            </span>
+            <Select
+              value={selectedSemesterId}
+              onChange={(value) => setSelectedSemesterId(value)}
+              className="w-full sm:w-96"
+              size="large"
+              placeholder={t("selectSemester") || "Select semester"}
+            >
+              {semesterList.map((s) => (
+                <Option key={s.semesterId} value={s.semesterId}>
+                  {`${s.season || ""} ${s.year || ""}`.trim()}
+                </Option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <span className="text-sm font-medium text-slate-600 min-w-[140px]">
               {t("filterByScope") || "Scope"}
             </span>
             <Select
@@ -538,7 +593,7 @@ Please make sure you are part of a team before the deadline.${closing}`,
                     const subtitleParts = [];
                     if (item.currentMembers !== undefined) {
                       subtitleParts.push(
-                        `${item.currentMembers}/${item.maxMembers} members`
+                        `${item.currentMembers}/${item.maxMembers} members`,
                       );
                     }
                     if (item.primaryRole) subtitleParts.push(item.primaryRole);
@@ -633,7 +688,7 @@ Please make sure you are part of a team before the deadline.${closing}`,
 
           {/* Title + Reset */}
           <div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-600">
                 {t("title") || "Title"} <span className="text-red-500">*</span>
               </span>
@@ -649,11 +704,11 @@ Please make sure you are part of a team before the deadline.${closing}`,
             </div>
 
             {isDirty ? (
-              <div className="text-xs text-slate-500 mt-1">(edited)</div>
+              <div className="text-xs text-slate-500 mb-2">(edited)</div>
             ) : null}
 
             <Input
-              className="mt-2 !rounded-2xl"
+              className="!rounded-2xl"
               size="large"
               value={title}
               onChange={(e) => {
@@ -669,12 +724,12 @@ Please make sure you are part of a team before the deadline.${closing}`,
 
           {/* Message */}
           <div>
-            <span className="text-sm font-medium text-slate-600">
+            <span className="text-sm font-medium text-slate-600 block mb-2">
               {t("message") || "Message"}{" "}
               <span className="text-red-500">*</span>
             </span>
             <TextArea
-              className="mt-2 !rounded-2xl"
+              className="!rounded-2xl"
               autoSize={{ minRows: 5, maxRows: 10 }}
               value={msg}
               onChange={(e) => {
@@ -708,4 +763,3 @@ Please make sure you are part of a team before the deadline.${closing}`,
     </div>
   );
 }
-
