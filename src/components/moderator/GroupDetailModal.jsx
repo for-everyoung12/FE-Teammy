@@ -43,21 +43,20 @@ export default function GroupDetailModal({ open, onClose, group }) {
   };
   return (
     <Modal
+      centered
       open={open}
       onCancel={onClose}
       footer={null}
-      centered
       title={null}
       width="min(1000px, 92vw)"
       styles={{
         content: { padding: 20, borderRadius: 14 },
         body: {
-          padding: 20,
-          maxHeight: "calc(100vh - 120px)",
+          padding: 10,
+          maxHeight: "calc(100vh - 140px)",
           overflowY: "auto",
         },
       }}
-      className="rounded-xl"
     >
       <div className="p-5 sm:p-6">
         <div className="flex items-start justify-between">
