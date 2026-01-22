@@ -8,6 +8,7 @@ import AddMemberModal from "../../components/common/my-group/AddMemberModal";
 import EditGroupModal from "../../components/common/my-group/EditGroupModal";
 import CloseGroupModal from "../../components/common/my-group/CloseGroupModal";
 import LoadingState from "../../components/common/LoadingState";
+import AIChatBox from "../../components/common/my-group/AIChatBox";
 import {
   Plus,
   FolderKanban,
@@ -18,8 +19,19 @@ import {
   ClipboardList,
   UserPlus,
   Clock,
+  Bot,
 } from "lucide-react";
-import { Modal, Form, Input, InputNumber, message, notification, DatePicker, Button, Tooltip } from "antd";
+import {
+  Modal,
+  Form,
+  Input,
+  InputNumber,
+  message,
+  notification,
+  DatePicker,
+  Button,
+  Tooltip,
+} from "antd";
 import dayjs from "dayjs";
 import TaskModal from "../../components/common/kanban/TaskModal";
 import useKanbanBoard from "../../hook/useKanbanBoard";
@@ -90,6 +102,8 @@ export default function MyGroup() {
 
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [columnForm] = Form.useForm();
+  const [showAIChat, setShowAIChat] = useState(true);
+  const [isAIChatMinimized, setIsAIChatMinimized] = useState(false);
 
   const {
     editOpen,
@@ -121,9 +135,7 @@ export default function MyGroup() {
         list = res.items;
       }
 
-      const mentorInvites = list.filter(
-        (x) => x.type === "mentor_invitation"
-      );
+      const mentorInvites = list.filter((x) => x.type === "mentor_invitation");
       setPendingInvitations(mentorInvites);
     } catch {
       setPendingInvitations([]);
@@ -178,7 +190,6 @@ export default function MyGroup() {
   const handleAddMember = (user) => {
     setShowModal(false);
   };
-
 
   const {
     columns,
@@ -295,7 +306,7 @@ export default function MyGroup() {
           (member) =>
             normalizeKey(member.id) === normalizeKey(rawId) ||
             normalizeKey(member.userId) === normalizeKey(rawId) ||
-            normalizeKey(member.email) === normalizeKey(rawId)
+            normalizeKey(member.email) === normalizeKey(rawId),
         );
         const fallbackName =
           assignee.name ||
@@ -355,7 +366,7 @@ export default function MyGroup() {
         task.endDate ||
         null,
       assignees: normalizeAssignees(
-        task.assignees || task.assignee || task.members || []
+        task.assignees || task.assignee || task.members || [],
       ),
       comments: task.comments || task.commentResponses || [],
     };
@@ -364,7 +375,7 @@ export default function MyGroup() {
     const payload = response?.data ?? response;
     if (Array.isArray(payload?.columns)) {
       const items = payload.columns.flatMap((col) =>
-        Array.isArray(col?.tasks) ? col.tasks : []
+        Array.isArray(col?.tasks) ? col.tasks : [],
       );
       const total =
         payload?.page?.totalElements ||
@@ -405,13 +416,13 @@ export default function MyGroup() {
   const sortedColumns = useMemo(
     () =>
       Object.entries(columnMeta || {}).sort(
-        (a, b) => (a[1]?.position || 0) - (b[1]?.position || 0)
+        (a, b) => (a[1]?.position || 0) - (b[1]?.position || 0),
       ),
-    [columnMeta]
+    [columnMeta],
   );
   const firstColumnId = useMemo(
     () => sortedColumns?.[0]?.[0] || Object.keys(columnMeta || {})[0] || null,
-    [sortedColumns, columnMeta]
+    [sortedColumns, columnMeta],
   );
   const listViewTasks = useMemo(() => {
     return (listViewRawTasks || [])
@@ -422,23 +433,31 @@ export default function MyGroup() {
     return Object.entries(columns || {}).flatMap(([colId, tasksInCol]) =>
       (tasksInCol || [])
         .map((task) => normalizeListTask({ ...task, columnId: colId }))
-        .filter(Boolean)
+        .filter(Boolean),
     );
   }, [columns, kanbanMembers]);
-  const filterListViewTasks = useCallback((tasks) => {
-    const normalizeStatusKey = (value = "") =>
-      value.toString().toLowerCase().replace(/[\s_]+/g, "");
-    const statusFilterKey = normalizeStatusKey(listFilterStatus);
-    return tasks.filter((task) => {
-      const effectiveStatus = normalizeStatusKey(
-        columnMeta?.[task.columnId]?.title || task.status || task.columnId || ""
-      );
-      return (
-        listFilterStatus === "All" ||
-        effectiveStatus === statusFilterKey
-      );
-    });
-  }, [listFilterStatus, columnMeta]);
+  const filterListViewTasks = useCallback(
+    (tasks) => {
+      const normalizeStatusKey = (value = "") =>
+        value
+          .toString()
+          .toLowerCase()
+          .replace(/[\s_]+/g, "");
+      const statusFilterKey = normalizeStatusKey(listFilterStatus);
+      return tasks.filter((task) => {
+        const effectiveStatus = normalizeStatusKey(
+          columnMeta?.[task.columnId]?.title ||
+            task.status ||
+            task.columnId ||
+            "",
+        );
+        return (
+          listFilterStatus === "All" || effectiveStatus === statusFilterKey
+        );
+      });
+    },
+    [listFilterStatus, columnMeta],
+  );
   const listViewFilteredTasks = useMemo(() => {
     return filterListViewTasks(listViewTasks);
   }, [listViewTasks, filterListViewTasks]);
@@ -446,9 +465,7 @@ export default function MyGroup() {
     return filterListViewTasks(listViewAllTasks);
   }, [listViewAllTasks, filterListViewTasks]);
   const listViewTotalForPager = useMemo(() => {
-    return listViewIsServerPaged
-      ? listViewTotal
-      : listViewFilteredTasks.length;
+    return listViewIsServerPaged ? listViewTotal : listViewFilteredTasks.length;
   }, [listViewIsServerPaged, listViewTotal, listViewFilteredTasks]);
   const listViewPagedTasks = useMemo(() => {
     if (listViewIsServerPaged) {
@@ -544,7 +561,7 @@ export default function MyGroup() {
     .sort(
       (a, b) =>
         new Date(b.updatedAt || b.createdAt || 0) -
-        new Date(a.updatedAt || a.createdAt || 0)
+        new Date(a.updatedAt || a.createdAt || 0),
     )
     .slice(0, 4);
 
@@ -614,7 +631,9 @@ export default function MyGroup() {
     try {
       setCloseGroupLoading(true);
       await GroupService.closeGroup(id);
-      message.success(t("closeGroupRequested") || "Close group request sent successfully");
+      message.success(
+        t("closeGroupRequested") || "Close group request sent successfully",
+      );
       setCloseGroupModalOpen(false);
       await fetchGroupDetail();
     } catch (error) {
@@ -622,7 +641,7 @@ export default function MyGroup() {
       message.warning(
         error?.response?.data?.message ||
           t("failedToRequestClose") ||
-          "Failed to request close group"
+          "Failed to request close group",
       );
     } finally {
       setCloseGroupLoading(false);
@@ -658,9 +677,7 @@ export default function MyGroup() {
     const trimmed = String(name || "").trim();
     if (!trimmed) return "?";
     const parts = trimmed.split(/\s+/).slice(0, 2);
-    return parts
-      .map((part) => part.charAt(0).toUpperCase())
-      .join("");
+    return parts.map((part) => part.charAt(0).toUpperCase()).join("");
   };
 
   const statusMeta = {
@@ -738,10 +755,7 @@ export default function MyGroup() {
         ...member,
         ...score,
         name:
-          score.memberName ||
-          member.displayName ||
-          member.name ||
-          "Unknown",
+          score.memberName || member.displayName || member.name || "Unknown",
         avatarUrl: member.avatarUrl,
         email: member.email,
         role: member.role,
@@ -752,16 +766,18 @@ export default function MyGroup() {
   const handleCreateColumn = () => {
     columnForm.validateFields().then((values) => {
       const positionValue = Number(values.position);
-      
+
       // Validate position: must be a valid number >= 0 and <= 1000
       if (isNaN(positionValue) || positionValue < 0 || positionValue > 1000) {
         notification.info({
           message: t("validationError") || "Validation Error",
-          description: t("positionMustBeValidNumber") || "Position must be a valid number between 0 and 1000.",
+          description:
+            t("positionMustBeValidNumber") ||
+            "Position must be a valid number between 0 and 1000.",
         });
         return;
       }
-      
+
       const payload = {
         columnName: values.columnName,
         position: positionValue,
@@ -787,9 +803,7 @@ export default function MyGroup() {
     });
   };
   const formatStatusLabel = (value = "") =>
-    value
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
+    value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   const handleOpenListTask = (task) => {
     if (!task) return;
     const fullTask = taskById.get(task.id);
@@ -817,7 +831,7 @@ export default function MyGroup() {
         columnId,
         leftColumn.position,
         leftColumn.id,
-        currentColumn.position
+        currentColumn.position,
       );
     }
 
@@ -841,7 +855,7 @@ export default function MyGroup() {
           columnId,
           currentColumn.position,
           leftColumn.id,
-          leftColumn.position
+          leftColumn.position,
         );
       }
       // Error handling
@@ -870,7 +884,7 @@ export default function MyGroup() {
         columnId,
         rightColumn.position,
         rightColumn.id,
-        currentColumn.position
+        currentColumn.position,
       );
     }
 
@@ -894,7 +908,7 @@ export default function MyGroup() {
           columnId,
           currentColumn.position,
           rightColumn.id,
-          rightColumn.position
+          rightColumn.position,
         );
       }
       // Error handling
@@ -916,7 +930,7 @@ export default function MyGroup() {
       { key: "workspace", label: t("workspace") || "Workspace" },
       { key: "feedback", label: t("feedback") || "Feedback" },
       { key: "posts", label: t("posts") || "Posts" },
-      { key: "files", label: t("files") || "Files" }
+      { key: "files", label: t("files") || "Files" },
     );
     return base;
   }, [isLeader, isReadOnly, t]);
@@ -932,84 +946,92 @@ export default function MyGroup() {
 
   return (
     <>
-    <div className="relative bg-[#f7fafc] min-h-screen flex overflow-hidden">
-      {/* Sidebar Navigation - Full Height */}
-      <div className="w-64 flex-shrink-0 hidden lg:block">
-        <SidebarNavigation
-          activeTab={activeTab}
-          onChange={setActiveTab}
-          tabs={tabs}
-          t={t}
-        />
-      </div>
+      <div className="relative bg-[#f7fafc] min-h-screen flex overflow-hidden">
+        {/* Sidebar Navigation - Full Height */}
+        <div className="w-64 flex-shrink-0 hidden lg:block">
+          <SidebarNavigation
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            tabs={tabs}
+            t={t}
+          />
+        </div>
 
-      {/* Mobile Sidebar (overlay) */}
-      <div className="lg:hidden">
-        <SidebarNavigation
-          activeTab={activeTab}
-          onChange={setActiveTab}
-          tabs={tabs}
-          t={t}
-        />
-      </div>
+        {/* Mobile Sidebar (overlay) */}
+        <div className="lg:hidden">
+          <SidebarNavigation
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            tabs={tabs}
+            t={t}
+          />
+        </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 min-w-0 overflow-y-auto h-screen">
-        <div className="px-2 sm:px-4 lg:px-6 xl:px-8 pt-20 pb-24">
-          {/* OVERVIEW */}
-          {activeTab === "overview" && (
-            <div className="space-y-6">
-              {/* Group Header - Only in Overview */}
-              {group && (
-                <InfoCard
-                  group={group}
-                  memberCount={groupMembers.length}
-                  onBack={() => navigate(-1)}
-                  onSelectTopic={
-                    group.canEdit && !isReadOnly
-                      ? () => navigate("/discover")
-                      : null
-                  }
-                  onEdit={
-                    group.canEdit && !isReadOnly ? () => setEditOpen(true) : null
-                  }
-                  onActivate={
-                    !isReadOnly && canActivateGroup ? handleActivateGroup : null
-                  }
-                  onCloseGroup={
-                    !isReadOnly && isLeader && isActiveStatus()
-                      ? handleCloseGroupClick
-                      : null
-                  }
-                  isLeader={isLeader}
-                  isMentor={isMentor}
-                />
-              )}
+        {/* Main Content Area */}
+        <div className="flex-1 min-w-0 overflow-y-auto h-screen">
+          <div className="px-2 sm:px-4 lg:px-6 xl:px-8 pt-20 pb-24">
+            {/* OVERVIEW */}
+            {activeTab === "overview" && (
+              <div className="space-y-6">
+                {/* Group Header - Only in Overview */}
+                {group && (
+                  <InfoCard
+                    group={group}
+                    memberCount={groupMembers.length}
+                    onBack={() => navigate(-1)}
+                    onSelectTopic={
+                      group.canEdit && !isReadOnly
+                        ? () => navigate("/discover")
+                        : null
+                    }
+                    onEdit={
+                      group.canEdit && !isReadOnly
+                        ? () => setEditOpen(true)
+                        : null
+                    }
+                    onActivate={
+                      !isReadOnly && canActivateGroup
+                        ? handleActivateGroup
+                        : null
+                    }
+                    onCloseGroup={
+                      !isReadOnly && isLeader && isActiveStatus()
+                        ? handleCloseGroupClick
+                        : null
+                    }
+                    isLeader={isLeader}
+                    isMentor={isMentor}
+                  />
+                )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <OverviewSection
-                  descriptionText={descriptionText}
-                  recentActivity={recentActivity}
-                  statusMeta={statusMeta}
-                  findAssignees={findAssignees}
-                  renderAssignee={renderAssignee}
-                  groupSkills={groupSkillsWithRole}
-                  t={t}
-                />
-                <MembersPanel
-                  groupMembers={groupMembers}
-                  mentor={mentor}
-                  mentors={mentors}
-                  group={group}
-                  onInvite={isReadOnly || isInviteLockedBySemesterStart ? null : () => setShowModal(true)}
-                  onKickMember={handleKickMember}
-                  onTransferLeader={handleTransferLeader}
-                  currentUserEmail={userInfo?.email}
-                  t={t}
-                  showStats={false}
-                />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <OverviewSection
+                    descriptionText={descriptionText}
+                    recentActivity={recentActivity}
+                    statusMeta={statusMeta}
+                    findAssignees={findAssignees}
+                    renderAssignee={renderAssignee}
+                    groupSkills={groupSkillsWithRole}
+                    t={t}
+                  />
+                  <MembersPanel
+                    groupMembers={groupMembers}
+                    mentor={mentor}
+                    mentors={mentors}
+                    group={group}
+                    onInvite={
+                      isReadOnly || isInviteLockedBySemesterStart
+                        ? null
+                        : () => setShowModal(true)
+                    }
+                    onKickMember={handleKickMember}
+                    onTransferLeader={handleTransferLeader}
+                    currentUserEmail={userInfo?.email}
+                    t={t}
+                    showStats={false}
+                  />
+                </div>
               </div>
-            </div>
             )}
 
             {/* MEMBERS */}
@@ -1044,7 +1066,9 @@ export default function MyGroup() {
                           inputReadOnly
                           onChange={setScoreTo}
                           disabledDate={(current) =>
-                            scoreFrom && current && current < scoreFrom.startOf("day")
+                            scoreFrom &&
+                            current &&
+                            current < scoreFrom.startOf("day")
                           }
                           className="!w-full"
                         />
@@ -1067,7 +1091,9 @@ export default function MyGroup() {
                         <InputNumber
                           min={0}
                           value={scoreMedium}
-                          onChange={(value) => setScoreMedium(Number(value || 0))}
+                          onChange={(value) =>
+                            setScoreMedium(Number(value || 0))
+                          }
                           className="!w-full"
                         />
                       </div>
@@ -1104,7 +1130,11 @@ export default function MyGroup() {
                     mentor={mentor}
                     mentors={mentors}
                     group={group}
-                    onInvite={isReadOnly || isInviteLockedBySemesterStart ? null : () => setShowModal(true)}
+                    onInvite={
+                      isReadOnly || isInviteLockedBySemesterStart
+                        ? null
+                        : () => setShowModal(true)
+                    }
                     onKickMember={handleKickMember}
                     onTransferLeader={handleTransferLeader}
                     currentUserEmail={userInfo?.email}
@@ -1124,7 +1154,7 @@ export default function MyGroup() {
                   <div>
                     <h3 className="text-xl font-semibold text-gray-900">
                       {t("mentorInvitationsTab") || "Mentor invitations"}
-                    </h3> 
+                    </h3>
                     <p className="text-sm text-gray-500">
                       {t("mentorInvitationsEmpty") ||
                         "Review mentor invitations sent to your group."}
@@ -1153,7 +1183,9 @@ export default function MyGroup() {
                       >
                         <div className="flex items-center gap-4 min-w-0">
                           <img
-                            src={inv.avatarUrl || avatarFromEmail(inv.email, 80)}
+                            src={
+                              inv.avatarUrl || avatarFromEmail(inv.email, 80)
+                            }
                             alt={inv.displayName || inv.email}
                             className="w-12 h-12 rounded-full object-cover shadow"
                           />
@@ -1222,7 +1254,7 @@ export default function MyGroup() {
                       <div className="inline-flex items-center gap-1.5">
                         <Calendar className="w-4 h-4 text-gray-400" />
                         <span>
-                          {(t("due") || "Due")}: {group.end || "--"}
+                          {t("due") || "Due"}: {group.end || "--"}
                         </span>
                       </div>
                       {group.status && (
@@ -1239,7 +1271,7 @@ export default function MyGroup() {
                         <div className="flex -space-x-2">
                           {groupMembers.slice(0, 4).map((member) => {
                             const initials = getMemberInitials(
-                              member.name || member.email
+                              member.name || member.email,
                             );
                             return (
                               <div
@@ -1275,7 +1307,8 @@ export default function MyGroup() {
                       <Tooltip
                         title={
                           !isLeader
-                            ? t("onlyLeaderCanInvite") || "Only leader can invite members"
+                            ? t("onlyLeaderCanInvite") ||
+                              "Only leader can invite members"
                             : isInviteLockedBySemesterStart
                             ? t("inviteDisabledSemesterStart") ||
                               "Invitations are closed on the semester start date."
@@ -1369,7 +1402,9 @@ export default function MyGroup() {
                     }`}
                   >
                     <Calendar className="w-4 h-4" />
-                    {(t("timelineTasks") || "Timeline").charAt(0).toUpperCase() +
+                    {(t("timelineTasks") || "Timeline")
+                      .charAt(0)
+                      .toUpperCase() +
                       (t("timelineTasks") || "Timeline").slice(1)}
                   </button>
                   <button
@@ -1416,70 +1451,70 @@ export default function MyGroup() {
                   />
                 )}
 
-                  {activeWorkspaceTab === "list" && (
-                    <div className="mt-2 space-y-3">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <label className="text-sm text-gray-600">
-                          {t("status") || "Status"}
-                        </label>
-                        <select
-                          value={listFilterStatus}
-                          onChange={(e) => setListFilterStatus(e.target.value)}
-                          className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white"
-                        >
-                          <option value="All">
-                            {t("allStatuses") || "All statuses"}
+                {activeWorkspaceTab === "list" && (
+                  <div className="mt-2 space-y-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="text-sm text-gray-600">
+                        {t("status") || "Status"}
+                      </label>
+                      <select
+                        value={listFilterStatus}
+                        onChange={(e) => setListFilterStatus(e.target.value)}
+                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white"
+                      >
+                        <option value="All">
+                          {t("allStatuses") || "All statuses"}
+                        </option>
+                        {statusOptions.map((status) => (
+                          <option key={status} value={status}>
+                            {formatStatusLabel(status)}
                           </option>
-                          {statusOptions.map((status) => (
-                            <option key={status} value={status}>
-                              {formatStatusLabel(status)}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="text-sm text-gray-500">
-                          {listViewTotalForPager} tasks
-                        </div>
+                        ))}
+                      </select>
+                      <div className="text-sm text-gray-500">
+                        {listViewTotalForPager} tasks
                       </div>
-                      <Pagination
-                        page={listViewPage}
-                        setPage={setListViewPage}
-                        pageSize={listViewPageSize}
-                        setPageSize={setListViewPageSize}
-                        total={listViewTotalForPager}
-                        showPager={false}
-                      />
-                      {listViewLoading ? (
-                        <div className="text-sm text-gray-500">
-                          {t("loading") || "Loading..."}
-                        </div>
-                      ) : listViewError ? (
-                        <div className="text-sm text-red-500">
-                          {listViewError}
-                        </div>
-                      ) : (
-                        <>
-                          <ListView
-                            tasks={listViewPagedTasks}
-                            columnMeta={columnMeta}
-                            onOpenTask={handleOpenListTask}
-                            onCreateTask={
-                              isReadOnly ? undefined : handleQuickCreateTask
-                            }
-                            pageSize={listViewPageSize}
-                            t={t}
-                          />
-                          <Pagination
-                            page={listViewPage}
-                            setPage={setListViewPage}
-                            pageSize={listViewPageSize}
-                            setPageSize={setListViewPageSize}
-                            total={listViewTotalForPager}
-                            showPageSize={false}
-                          />
-                        </>
-                      )}
                     </div>
-                  )}
+                    <Pagination
+                      page={listViewPage}
+                      setPage={setListViewPage}
+                      pageSize={listViewPageSize}
+                      setPageSize={setListViewPageSize}
+                      total={listViewTotalForPager}
+                      showPager={false}
+                    />
+                    {listViewLoading ? (
+                      <div className="text-sm text-gray-500">
+                        {t("loading") || "Loading..."}
+                      </div>
+                    ) : listViewError ? (
+                      <div className="text-sm text-red-500">
+                        {listViewError}
+                      </div>
+                    ) : (
+                      <>
+                        <ListView
+                          tasks={listViewPagedTasks}
+                          columnMeta={columnMeta}
+                          onOpenTask={handleOpenListTask}
+                          onCreateTask={
+                            isReadOnly ? undefined : handleQuickCreateTask
+                          }
+                          pageSize={listViewPageSize}
+                          t={t}
+                        />
+                        <Pagination
+                          page={listViewPage}
+                          setPage={setListViewPage}
+                          pageSize={listViewPageSize}
+                          setPageSize={setListViewPageSize}
+                          total={listViewTotalForPager}
+                          showPageSize={false}
+                        />
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* BACKLOG SUB-TAB */}
                 {activeWorkspaceTab === "backlog" && (
@@ -1542,9 +1577,9 @@ export default function MyGroup() {
             {activeTab === "posts" && (
               <GroupPostsTab groupId={id} groupData={group} />
             )}
+          </div>
         </div>
       </div>
-    </div>
 
       {/* ---------------------
            MODALS
@@ -1588,9 +1623,7 @@ export default function MyGroup() {
         members={kanbanMembers}
         groupDetail={group}
         onUpdateTask={isReadOnly ? () => {} : updateTaskFields}
-        onUpdateAssignees={
-          isReadOnly ? () => {} : updateTaskAssignees
-        }
+        onUpdateAssignees={isReadOnly ? () => {} : updateTaskAssignees}
         onDeleteTask={isReadOnly ? undefined : deleteTask}
         onFetchComments={loadTaskComments}
         onAddComment={isReadOnly ? () => {} : addTaskComment}
@@ -1640,17 +1673,26 @@ export default function MyGroup() {
                   const numValue = Number(value);
                   if (isNaN(numValue)) {
                     return Promise.reject(
-                      new Error(t("positionMustBeNumber") || "Position must be a number")
+                      new Error(
+                        t("positionMustBeNumber") ||
+                          "Position must be a number",
+                      ),
                     );
                   }
                   if (numValue < 0) {
                     return Promise.reject(
-                      new Error(t("positionMustBePositive") || "Position must be greater than or equal to 0")
+                      new Error(
+                        t("positionMustBePositive") ||
+                          "Position must be greater than or equal to 0",
+                      ),
                     );
                   }
                   if (numValue > 1000) {
                     return Promise.reject(
-                      new Error(t("positionTooLarge") || "Position must be less than or equal to 1000")
+                      new Error(
+                        t("positionTooLarge") ||
+                          "Position must be less than or equal to 1000",
+                      ),
                     );
                   }
                   return Promise.resolve();
@@ -1667,12 +1709,33 @@ export default function MyGroup() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* AI Chat Box */}
+      {showAIChat && (
+        <AIChatBox
+          groupId={id}
+          t={t}
+          onClose={() => setShowAIChat(false)}
+          isMinimized={isAIChatMinimized}
+          onToggleMinimize={() => setIsAIChatMinimized(!isAIChatMinimized)}
+        />
+      )}
+
+      {!showAIChat && (
+        <button
+          onClick={() => {
+            setShowAIChat(true);
+            setIsAIChatMinimized(false);
+          }}
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-3.5 text-white shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-200 group"
+          title={t("openAIAssistant") || "Open AI Assistant"}
+        >
+          <Bot className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+          <span className="font-semibold text-sm">
+            {t("aiAssistant") || "AI Assistant"}
+          </span>
+        </button>
+      )}
     </>
   );
 }
-
-
-
-
-
-
