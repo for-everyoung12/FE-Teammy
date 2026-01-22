@@ -80,5 +80,21 @@ generatePersonalPost() {
     isLoading: true,
   });
 },
+
+assistantDraft(groupId, message) {
+  return BaseService.post({
+    url: API.GROUP.ASSISTANT_DRAFT(groupId),
+    payload: { message },
+    isLoading: true,
+  });
+},
+
+assistantCommit(groupId, draft) {
+  return BaseService.post({
+    url: API.GROUP.ASSISTANT_COMMIT(groupId),
+    payload: draft,
+    isLoading: true,
+  });
+},
 };
 

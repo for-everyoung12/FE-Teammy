@@ -89,6 +89,8 @@ export const API = {
     CLOSE_GROUP: (groupId) => `/groups/${groupId}/close`,
     CONFIRM_CLOSE: (groupId) => `/groups/${groupId}/close/confirm`,
     REJECT_CLOSE: (groupId) => `/groups/${groupId}/close/reject`,
+    ASSISTANT_DRAFT: (groupId) => `/groups/${groupId}/assistant/draft`,
+    ASSISTANT_COMMIT: (groupId) => `/groups/${groupId}/assistant/commit`,
   },
   TOPICS: {
     LIST: "/topics",
