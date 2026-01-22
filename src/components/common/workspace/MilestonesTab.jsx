@@ -9,6 +9,7 @@ import {
   Target,
   CheckCircle2,
   Circle,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Button,
@@ -17,7 +18,6 @@ import {
   Input,
   Modal,
   Select,
-  Tag,
   notification,
   Progress,
 } from "antd";
@@ -25,19 +25,47 @@ import dayjs from "dayjs";
 import { MilestoneService } from "../../../services/milestone.service";
 import { BacklogService } from "../../../services/backlog.service";
 import { useTranslation } from "../../../hook/useTranslation";
-import MoveIncompleteItemsDialog from "./MoveIncompleteItemsDialog";
-
-const statusColors = {
-  planned: "default",
-  in_progress: "blue",
-  done: "green",
-  completed: "green",
-};
+import useMilestoneOverdueActions from "../../../hook/useMilestoneOverdueActions";
+import ResolveOverdueModal from "./ResolveOverdueModal";
 
 const formatDate = (value) => {
   if (!value) return "--";
   const d = dayjs(value);
   return d.isValid() ? d.format("DD/MM/YYYY") : "--";
+};
+
+const getMilestoneProgress = (item) => ({
+  percent: Number(item?.completionPercent || 0),
+  done: Number(item?.completedItems || 0),
+  total: Number(item?.totalItems || 0),
+});
+
+const getMilestoneOverdueInfo = (item) => {
+  if (!item) return { isOverdue: false, incompleteCount: 0 };
+  const { done, total } = getMilestoneProgress(item);
+  const incompleteCount = Math.max(0, total - done);
+  const isOverdue =
+    item.isOverdue ||
+    (item.targetDate &&
+      dayjs(item.targetDate).isBefore(dayjs().startOf("day")) &&
+      incompleteCount > 0);
+  return { isOverdue, incompleteCount };
+};
+
+const isMilestoneOverdueForMove = (item) => {
+  if (!item) return false;
+  if (item.isOverdue) return true;
+  if (!item.targetDate) return false;
+  const dueDate = dayjs(item.targetDate);
+  return dueDate.isValid() && dueDate.isBefore(dayjs().startOf("day"));
+};
+
+const getOverdueDays = (item) => {
+  if (!item?.targetDate) return 0;
+  const due = dayjs(item.targetDate).startOf("day");
+  if (!due.isValid()) return 0;
+  const days = dayjs().startOf("day").diff(due, "day");
+  return Math.max(0, days);
 };
 
 export default function MilestonesTab({ groupId, readOnly = false, groupStatus = "" }) {
@@ -57,13 +85,11 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
   });
   const [backlogOptions, setBacklogOptions] = useState([]);
   const [assignBacklogIds, setAssignBacklogIds] = useState([]);
-  const [overdueActions, setOverdueActions] = useState(null);
-  const [overdueLoading, setOverdueLoading] = useState(false);
-  const [overdueError, setOverdueError] = useState("");
-  const [extendDate, setExtendDate] = useState(null);
-  const [extendLoading, setExtendLoading] = useState(false);
-  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [expandedMilestoneId, setExpandedMilestoneId] = useState(null);
+  const [overdueDetailsOpenId, setOverdueDetailsOpenId] = useState(null);
+  const [resolveModalOpen, setResolveModalOpen] = useState(false);
+  const [resolveMilestone, setResolveMilestone] = useState(null);
+  const [overdueMilestone, setOverdueMilestone] = useState(null);
   const fetchedRef = useRef(null);
 
   const isGroupClosed = () => {
@@ -160,76 +186,58 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
     );
   };
 
-  const fetchOverdueActions = async (milestoneId) => {
-    if (!groupId || !milestoneId) return;
-    setOverdueLoading(true);
-    setOverdueError("");
-    try {
-      const res = await MilestoneService.getOverdueActions(groupId, milestoneId);
-      const payload = res?.data ?? res;
-      setOverdueActions(payload || null);
-    } catch (err) {
-      setOverdueActions(null);
-      setOverdueError(
-        err?.response?.data?.message ||
-          t("failedLoadOverdueActions") ||
-          "Failed to load overdue actions."
-      );
-    } finally {
-      setOverdueLoading(false);
-    }
-  };
+  const {
+    overdueActions,
+    overdueLoading,
+    overdueError,
+    extendDate,
+    extendLoading,
+    fetchOverdueActions,
+    handleExtendMilestone,
+    setExtendDate,
+  } = useMilestoneOverdueActions({
+    groupId,
+    milestone: overdueMilestone,
+    isActive: Boolean(overdueMilestone),
+    t,
+    onRefresh: fetchMilestones,
+    onExtended: (nextDate) =>
+      setForm((prev) => ({ ...prev, targetDate: nextDate })),
+  });
 
   useEffect(() => {
-    if (!modalOpen || !selectedMilestone) {
-      setOverdueActions(null);
-      setOverdueError("");
-      setExtendDate(null);
+    if (!resolveModalOpen && !overdueDetailsOpenId) {
+      setOverdueMilestone(null);
       return;
     }
-    const milestoneId = selectedMilestone.milestoneId || selectedMilestone.id;
-    fetchOverdueActions(milestoneId);
-  }, [modalOpen, selectedMilestone, groupId]);
-
-  const handleExtendMilestone = async () => {
-    if (!groupId || !selectedMilestone) return;
-    if (!extendDate) {
-      notification.info({
-        message: t("pleaseSelectDate") || "Please select a date.",
-      });
-      return;
-    }
-    const milestoneId = selectedMilestone.milestoneId || selectedMilestone.id;
-    setExtendLoading(true);
-    try {
-      await MilestoneService.extendMilestone(groupId, milestoneId, {
-        newTargetDate: dayjs(extendDate).format("YYYY-MM-DD"),
-      });
-      notification.success({
-        message: t("updated") || "Updated",
-      });
-      setForm((prev) => ({ ...prev, targetDate: extendDate }));
-      setExtendDate(null);
-      fetchOverdueActions(milestoneId);
-      fetchMilestones();
-    } catch (err) {
-      notification.info({
-        message: t("actionFailed") || "Action failed",
-        description:
-          err?.response?.data?.message ||
-          t("pleaseTryAgain") ||
-          "Please try again.",
-      });
-    } finally {
-      setExtendLoading(false);
-    }
-  };
+    const activeId = resolveModalOpen
+      ? resolveMilestone?.milestoneId || resolveMilestone?.id
+      : overdueDetailsOpenId;
+    if (!activeId) return;
+    const nextMilestone =
+      list.find(
+        (item) =>
+          String(item.milestoneId || item.id) === String(activeId)
+      ) || resolveMilestone;
+    setOverdueMilestone(nextMilestone || null);
+  }, [resolveModalOpen, overdueDetailsOpenId, resolveMilestone, list]);
 
   const handleMoveSuccess = () => {
-    if (!selectedMilestone) return;
-    const milestoneId = selectedMilestone.milestoneId || selectedMilestone.id;
-    fetchOverdueActions(milestoneId);
+    fetchOverdueActions();
     fetchMilestones();
+  };
+
+  const openResolveModal = (item) => {
+    setResolveMilestone(item);
+    setResolveModalOpen(true);
+    setOverdueMilestone(item);
+  };
+
+  const toggleOverdueDetails = (item) => {
+    const id = item?.milestoneId || item?.id;
+    if (!id) return;
+    setOverdueMilestone(item);
+    setOverdueDetailsOpenId((prev) => (prev === id ? null : id));
   };
 
   const handleSave = async () => {
@@ -381,12 +389,6 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
     });
   };
 
-  const statusTag = (value) => {
-    const key = (value || "").toLowerCase();
-    const color = statusColors[key] || "default";
-    return <Tag color={color}>{value || "planned"}</Tag>;
-  };
-
   const listToShow = useMemo(() => list || [], [list]);
 
   const isTaskDone = (item) => {
@@ -437,20 +439,15 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
           {listToShow.map((item) => {
             const mId = item.milestoneId || item.id;
             const assignedItems = item.items || [];
-            const progress = {
-              percent: item.completionPercent || 0,
-              done: item.completedItems || 0,
-              total: item.totalItems || 0,
-            };
-            const isOverdueFlag =
-              item.isOverdue ||
-              (item.targetDate &&
-                dayjs(item.targetDate).isBefore(dayjs().startOf("day")) &&
-                Number(progress.done || 0) < Number(progress.total || 0));
-            const incompleteCount = Math.max(
-              0,
-              Number(progress.total || 0) - Number(progress.done || 0)
-            );
+            const progress = getMilestoneProgress(item);
+            const { isOverdue: isOverdueFlag, incompleteCount } =
+              getMilestoneOverdueInfo(item);
+            const overdueDays = getOverdueDays(item);
+            const isDetailsOpen = overdueDetailsOpenId === mId;
+            const hasOverdueData =
+              overdueMilestone &&
+              String(overdueMilestone.milestoneId || overdueMilestone.id) ===
+                String(mId);
             const isExpanded = expandedMilestoneId === mId;
             return (
               <div
@@ -466,15 +463,6 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
                       <h4 className="text-lg font-semibold text-gray-900">
                         {item.name || "Untitled milestone"}
                       </h4>
-                      {isOverdueFlag && (
-                        <Tag color="red">{t("overdue") || "Overdue"}</Tag>
-                      )}
-                      {isOverdueFlag && incompleteCount > 0 && (
-                        <span className="text-xs text-red-600">
-                          {incompleteCount} {t("items") || "items"}{" "}
-                          {t("remaining") || "remaining"}
-                        </span>
-                      )}
                     </div>
                     {item.description && (
                       <p className="text-sm text-gray-600 whitespace-pre-line">
@@ -542,6 +530,104 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
                     </Dropdown>
                   )}
                 </div>
+
+                {isOverdueFlag && (
+                  <div
+                    className="mt-3 flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2 text-xs text-amber-800">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      <span className="font-semibold">{t("overdue") || "Overdue"}</span>
+                      <span>•</span>
+                      <span>
+                        {incompleteCount}{" "}
+                        {incompleteCount === 1
+                          ? t("itemIncomplete") || "item incomplete"
+                          : t("itemsIncomplete") || "items incomplete"}
+                      </span>
+                      <span>•</span>
+                      <span>
+                        {overdueDays}{" "}
+                        {overdueDays === 1
+                          ? t("dayLate") || "day late"
+                          : t("daysLate") || "days late"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={() => openResolveModal(item)}
+                      >
+                        {t("resolveOverdue") || "Resolve overdue"}
+                      </Button>
+                      <Button
+                        size="small"
+                        type="link"
+                        onClick={() => toggleOverdueDetails(item)}
+                      >
+                        {isDetailsOpen
+                          ? t("hideDetails") || "Hide details"
+                          : t("viewDetails") || "View details"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {isOverdueFlag && isDetailsOpen && (
+                  <div className="mt-3 rounded-lg border border-gray-100 bg-white">
+                    <div className="border-b border-gray-100 px-3 py-2 text-xs font-semibold uppercase text-gray-500">
+                      {t("overdueItemsList") || "Overdue items list"}
+                    </div>
+                    {overdueLoading && hasOverdueData ? (
+                      <div className="px-3 py-3 text-xs text-gray-500">
+                        {t("loading") || "Loading..."}
+                      </div>
+                    ) : overdueError && hasOverdueData ? (
+                      <div className="flex items-center justify-between px-3 py-3 text-xs text-red-600">
+                        <span>{overdueError}</span>
+                        <Button size="small" type="link" onClick={fetchOverdueActions}>
+                          {t("retry") || "Retry"}
+                        </Button>
+                      </div>
+                    ) : hasOverdueData &&
+                      Array.isArray(overdueActions?.overdueBacklogItems) &&
+                      overdueActions.overdueBacklogItems.length > 0 ? (
+                      <div className="max-h-52 overflow-y-auto">
+                        <div className="grid grid-cols-12 gap-2 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase text-gray-500">
+                          <span className="col-span-5">{t("title") || "Title"}</span>
+                          <span className="col-span-3">{t("dueDate") || "Due date"}</span>
+                          <span className="col-span-2">{t("status") || "Status"}</span>
+                          <span className="col-span-2">{t("column") || "Column"}</span>
+                        </div>
+                        {overdueActions.overdueBacklogItems.map((overItem) => (
+                          <div
+                            key={overItem.backlogItemId || overItem.title}
+                            className="grid grid-cols-12 gap-2 border-t border-gray-100 px-3 py-2 text-sm text-gray-700"
+                          >
+                            <span className="col-span-5 truncate">
+                              {overItem.title || t("untitledTask") || "Untitled task"}
+                            </span>
+                            <span className="col-span-3 text-gray-600">
+                              {formatDate(overItem.dueDate)}
+                            </span>
+                            <span className="col-span-2 text-gray-600">
+                              {overItem.status || "--"}
+                            </span>
+                            <span className="col-span-2 text-gray-600">
+                              {overItem.columnName || "--"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-3 text-xs text-gray-500">
+                        {t("noOverdueTasks") || "No overdue tasks"}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {isExpanded && (
                   <div className="mt-4 border-t border-gray-100 pt-4">
@@ -707,192 +793,6 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
               onChange={(value) => setForm((prev) => ({ ...prev, targetDate: value }))}
             />
           </div>
-          {(() => {
-            const showOverduePanel =
-              overdueLoading ||
-              overdueError ||
-              (overdueActions?.isOverdue &&
-                Number(overdueActions?.incompleteItems || 0) > 0);
-            if (!selectedMilestone || !showOverduePanel) return null;
-            return (
-            <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase text-amber-700">
-                    {t("milestoneOverdue") || "Milestone is overdue"}
-                  </span>
-                </div>
-                <Tag color="orange">
-                  {t("overdueActions") || "Overdue Actions"}
-                </Tag>
-              </div>
-
-              {overdueLoading && (
-                <p className="text-xs text-gray-500">
-                  {t("loading") || "Loading..."}
-                </p>
-              )}
-              {overdueError && (
-                <div className="flex items-center justify-between text-xs text-red-600">
-                  <span>{overdueError}</span>
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={() =>
-                      fetchOverdueActions(
-                        selectedMilestone.milestoneId || selectedMilestone.id
-                      )
-                    }
-                  >
-                    {t("retry") || "Retry"}
-                  </Button>
-                </div>
-              )}
-
-              {overdueActions?.isOverdue &&
-                Number(overdueActions?.incompleteItems || 0) > 0 && (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-                    {[
-                      {
-                        label: t("totalItems") || "Total items",
-                        value: overdueActions.totalItems ?? 0,
-                      },
-                      {
-                        label: t("completedItems") || "Completed items",
-                        value: overdueActions.completedItems ?? 0,
-                      },
-                      {
-                        label: t("incompleteItems") || "Incomplete items",
-                        value: overdueActions.incompleteItems ?? 0,
-                      },
-                      {
-                        label: t("overdueItems") || "Overdue items",
-                        value: overdueActions.overdueItems ?? 0,
-                      },
-                      {
-                        label:
-                          t("tasksDueAfterMilestone") ||
-                          "Items due after milestone",
-                        value: overdueActions.tasksDueAfterMilestone ?? 0,
-                      },
-                    ].map((item) => (
-                      <div
-                        key={item.label}
-                        className="rounded-lg border border-amber-200 bg-white px-3 py-2"
-                      >
-                        <p className="text-[11px] uppercase text-gray-500">
-                          {item.label}
-                        </p>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {item.value}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {Array.isArray(overdueActions.overdueBacklogItems) &&
-                    overdueActions.overdueBacklogItems.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-600">
-                        {t("overdueItemsList") || "Overdue items"}
-                      </p>
-                      <div className="border border-gray-200 rounded-lg overflow-hidden text-xs">
-                        <div className="grid grid-cols-4 gap-2 bg-gray-50 px-3 py-2 font-semibold text-gray-600">
-                          <span>{t("title") || "Title"}</span>
-                          <span>{t("dueDate") || "Due date"}</span>
-                          <span>{t("status") || "Status"}</span>
-                          <span>{t("column") || "Column"}</span>
-                        </div>
-                        {overdueActions.overdueBacklogItems.map((item) => (
-                          <div
-                            key={item.backlogItemId || item.title}
-                            className="grid grid-cols-4 gap-2 px-3 py-2 border-t border-gray-100"
-                          >
-                            <span className="text-gray-900">
-                              {item.title || t("untitled") || "Untitled"}
-                            </span>
-                            <span className="text-gray-600">
-                              {formatDate(item.dueDate)}
-                            </span>
-                            <span className="text-gray-600">
-                              {item.status || "--"}
-                            </span>
-                            <span className="text-gray-600">
-                              {item.columnName || "--"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {Array.isArray(overdueActions.tasksDueAfter) &&
-                    overdueActions.tasksDueAfter.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold text-gray-600">
-                        {t("tasksDueAfterMilestone") || "Items due after milestone"}
-                      </p>
-                      <div className="border border-gray-200 rounded-lg overflow-hidden text-xs">
-                        <div className="grid grid-cols-3 gap-2 bg-gray-50 px-3 py-2 font-semibold text-gray-600">
-                          <span>{t("title") || "Title"}</span>
-                          <span>{t("dueDate") || "Due date"}</span>
-                          <span>{t("column") || "Column"}</span>
-                        </div>
-                        {overdueActions.tasksDueAfter.map((item) => (
-                          <div
-                            key={item.backlogItemId || item.title}
-                            className="grid grid-cols-3 gap-2 px-3 py-2 border-t border-gray-100"
-                          >
-                            <span className="text-gray-900">
-                              {item.title || t("untitled") || "Untitled"}
-                            </span>
-                            <span className="text-gray-600">
-                              {formatDate(item.dueDate)}
-                            </span>
-                            <span className="text-gray-600">
-                              {item.columnName || "--"}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-2 border-t border-amber-100 pt-3">
-                    <label className="text-sm text-gray-700 mb-1 block">
-                      {t("newTargetDate") || "New target date"}
-                    </label>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <DatePicker
-                        className="w-full"
-                        value={extendDate}
-                        inputReadOnly
-                        disabledDate={(current) =>
-                          current && current < dayjs().startOf("day")
-                        }
-                        onChange={setExtendDate}
-                      />
-                      <Button
-                        type="primary"
-                        loading={extendLoading}
-                        onClick={handleExtendMilestone}
-                      >
-                        {t("extendMilestone") || "Extend milestone"}
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button onClick={() => setMoveDialogOpen(true)}>
-                      {t("moveIncompleteItems") || "Move incomplete items"}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-            );
-          })()}
           {selectedMilestone && (
             <>
               <div>
@@ -930,14 +830,29 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
       </Modal>
       )}
 
-      {!readOnly && selectedMilestone && (
-        <MoveIncompleteItemsDialog
-          open={moveDialogOpen}
-          onCancel={() => setMoveDialogOpen(false)}
+      {!readOnly && resolveMilestone && (
+        <ResolveOverdueModal
+          open={resolveModalOpen}
+          onCancel={() => {
+            setResolveModalOpen(false);
+            setResolveMilestone(null);
+          }}
           groupId={groupId}
-          milestoneId={selectedMilestone.milestoneId || selectedMilestone.id}
-          currentMilestoneId={selectedMilestone.milestoneId || selectedMilestone.id}
+          milestone={resolveMilestone}
+          milestoneOptions={(list || [])
+            .filter((m) => (m.milestoneId || m.id) !== (resolveMilestone.milestoneId || resolveMilestone.id))
+            .filter((m) => !isMilestoneOverdueForMove(m))
+            .map((m) => ({
+              value: m.milestoneId || m.id,
+              label: `${m.name || "Milestone"} - ${formatDate(m.targetDate)}`,
+            }))}
           t={t}
+          overdueActions={overdueActions}
+          overdueLoading={overdueLoading}
+          extendDate={extendDate}
+          extendLoading={extendLoading}
+          setExtendDate={setExtendDate}
+          onExtend={handleExtendMilestone}
           onMoved={handleMoveSuccess}
         />
       )}
