@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Tooltip } from "antd";
+import { Button, DatePicker, Drawer, Input, Pagination, Select, Tooltip } from "antd";
 import dayjs from "dayjs";
 import {
   MoreVertical,
@@ -27,9 +27,17 @@ export default function MembersPanel({
   showStats = false,
   contributionStats = [],
   board = null,
+  filtersContent = null,
 }) {
   const [openMenuId, setOpenMenuId] = useState(null);
-  const [expandedIds, setExpandedIds] = useState(new Set());
+  const [detailMember, setDetailMember] = useState(null);
+  const [detailPage, setDetailPage] = useState(1);
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
+  const [detailSearch, setDetailSearch] = useState("");
+  const [detailStatus, setDetailStatus] = useState("all");
+  const [detailPriority, setDetailPriority] = useState("all");
+  const [detailSort, setDetailSort] = useState("recent");
+  const [detailDateRange, setDetailDateRange] = useState(null);
   const navigate = useNavigate();
 
   const groupStatus = (group?.status || "").toString();
@@ -140,13 +148,138 @@ export default function MembersPanel({
   };
 
 
-  const toggleDetails = (memberId) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(memberId)) next.delete(memberId);
-      else next.add(memberId);
-      return next;
-    });
+  const openDetails = (member) => {
+    setDetailMember(member || null);
+    setDetailPage(1);
+    setDetailDrawerOpen(true);
+    setDetailSearch("");
+    setDetailStatus("all");
+    setDetailPriority("all");
+    setDetailSort("recent");
+    setDetailDateRange(null);
+  };
+
+  const closeDetails = () => {
+    setDetailMember(null);
+    setDetailPage(1);
+    setDetailDrawerOpen(false);
+  };
+
+  const getTaskDate = (task) => {
+    return (
+      task?.completedAt ||
+      task?.doneAt ||
+      task?.updatedAt ||
+      task?.createdAt ||
+      null
+    );
+  };
+
+  const getTaskStatus = (task) => {
+    const status = (task?.status || "").toLowerCase();
+    if (status) return status;
+    if (task?.completedAt || task?.doneAt) return "done";
+    return "in_progress";
+  };
+
+  const getTaskPoints = (task) => {
+    const raw =
+      task?.points ??
+      task?.point ??
+      task?.storyPoints ??
+      task?.storyPoint ??
+      task?.story_points ??
+      task?.story_point ??
+      task?.complexity ??
+      task?.score ??
+      0;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const getTaskMilestone = (task) => {
+    return (
+      task?.milestoneName ||
+      task?.milestone?.name ||
+      task?.milestone ||
+      "--"
+    );
+  };
+
+  const filterTasks = (tasks = [], options = {}) => {
+    const {
+      search = "",
+      status = "all",
+      range = "all",
+      priority = "all",
+      dateRange = null,
+      sort = "recent",
+    } = options;
+    const normalizedSearch = search.trim().toLowerCase();
+    let results = [...tasks];
+
+    if (normalizedSearch) {
+      results = results.filter((task) =>
+        (task?.title || "").toLowerCase().includes(normalizedSearch)
+      );
+    }
+
+    if (status !== "all") {
+      results = results.filter((task) => getTaskStatus(task) === status);
+    }
+
+    if (priority !== "all") {
+      results = results.filter(
+        (task) => (task?.priority || "").toLowerCase() === priority
+      );
+    }
+
+    if (range !== "all") {
+      const now = dayjs();
+      const cutoff =
+        range === "week" ? now.subtract(7, "day") : now.subtract(1, "month");
+      results = results.filter((task) => {
+        const dateValue = getTaskDate(task);
+        if (!dateValue) return false;
+        const parsed = dayjs(dateValue);
+        return parsed.isValid() && parsed.isAfter(cutoff);
+      });
+    }
+
+    if (Array.isArray(dateRange) && dateRange.length === 2) {
+      const [start, end] = dateRange;
+      const startMs = start ? start.startOf("day").valueOf() : null;
+      const endMs = end ? end.endOf("day").valueOf() : null;
+      results = results.filter((task) => {
+        const dateValue = getTaskDate(task);
+        if (!dateValue) return false;
+        const parsed = dayjs(dateValue);
+        if (!parsed.isValid()) return false;
+        const time = parsed.valueOf();
+        if (startMs && time < startMs) return false;
+        if (endMs && time > endMs) return false;
+        return true;
+      });
+    }
+
+    if (sort === "points") {
+      results.sort((a, b) => getTaskPoints(b) - getTaskPoints(a));
+    } else if (sort === "priority") {
+      const order = { high: 0, medium: 1, low: 2 };
+      results.sort(
+        (a, b) =>
+          (order[(a?.priority || "").toLowerCase()] ?? 9) -
+          (order[(b?.priority || "").toLowerCase()] ?? 9)
+      );
+    } else {
+      results.sort((a, b) => {
+        const aDate = getTaskDate(a);
+        const bDate = getTaskDate(b);
+        return dayjs(bDate || 0).valueOf() - dayjs(aDate || 0).valueOf();
+      });
+    }
+
+    return results;
   };
 
 
@@ -179,6 +312,7 @@ export default function MembersPanel({
   // When we only need the contribution cards (members tab), skip the other blocks.
   if (showStats) {
     return (
+      <>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -255,6 +389,7 @@ export default function MembersPanel({
               });
             })()}
           </div>
+          {filtersContent}
           <h4 className="text-sm font-semibold text-gray-500 uppercase mb-4">
             {t("contribution") || "Contribution"}
           </h4>
@@ -281,7 +416,6 @@ export default function MembersPanel({
               member.email ||
               `member-${idx}`;
             const memberKey = String(memberId);
-            const showDetails = expandedIds.has(memberKey);
             const progressPercent = tasksAssigned
               ? Math.round((tasksCompleted / tasksAssigned) * 100)
               : 0;
@@ -414,83 +548,11 @@ export default function MembersPanel({
                 </div>
                 <button
                   type="button"
-                  onClick={() => toggleDetails(memberKey)}
+                  onClick={() => openDetails(member)}
                   className="mt-2 w-full text-sm text-gray-600 hover:text-gray-900 flex items-center justify-center gap-2 border-t border-gray-100 pt-3"
                 >
-                  {showDetails ? (
-                    <ChevronUp className="w-4 h-4" />
-                  ) : (
-                    <ChevronDown className="w-4 h-4" />
-                  )}
-                  <span>
-                    {showDetails
-                      ? t("hideDetails") || "Hide details"
-                      : t("showDetails") || "Show details"}
-                  </span>
+                  <span>{t("showDetails") || "Show details"}</span>
                 </button>
-                {showDetails && (
-                  <div className="mt-4 space-y-4 border-t border-gray-100 pt-4">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                        {t("byPriority") || "By Priority"}
-                      </p>
-                      <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
-                        {["high", "medium", "low"].map((level) => {
-                          const priority = member.byPriority?.[level] || {};
-                          return (
-                            <div
-                              key={level}
-                              className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center"
-                            >
-                              <div className="text-sm font-semibold text-gray-800 capitalize">
-                                {t(level) || level}
-                              </div>
-                              <div className="mt-1 text-lg font-bold text-gray-900">
-                                {priority.score ?? 0}
-                              </div>
-                              <div className="text-[11px] text-gray-500">
-                                {priority.done ?? 0} {t("tasksDone") || "done"}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                        {t("tasks") || "Tasks"}
-                      </p>
-                      {(member.taskDetails || []).length ? (
-                        <div className="space-y-2">
-                          {member.taskDetails.map((task) => (
-                            <div
-                              key={task.taskId}
-                              className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
-                            >
-                              <div>
-                                <div className="font-medium text-gray-800">
-                                  {task.title || "Untitled"}
-                                </div>
-                                <div className="text-xs text-gray-500">
-                                  {(task.priority || "").toLowerCase()}
-                                </div>
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {task.completedAt
-                                  ? t("done") || "Done"
-                                  : t("inProgress") || "In progress"}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-500">
-                          {t("noTasks") || "No tasks"}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })
@@ -502,6 +564,161 @@ export default function MembersPanel({
           </div>
         </div>
       </div>
+      <Drawer
+        open={detailDrawerOpen}
+        onClose={closeDetails}
+        title={
+          detailMember
+            ? `${t("taskDetails") || "Task Details"} - ${
+                detailMember.name || detailMember.displayName || "Member"
+              }`
+            : t("taskDetails") || "Task Details"
+        }
+        width={720}
+      >
+        {detailMember && (() => {
+          const tasks = detailMember.taskDetails || [];
+          const filteredTasks = filterTasks(tasks, {
+            search: detailSearch,
+            status: detailStatus,
+            priority: detailPriority,
+            dateRange: detailDateRange,
+            sort: detailSort,
+          });
+          const pageSize = 10;
+          const startIndex = (detailPage - 1) * pageSize;
+          const pagedTasks = filteredTasks.slice(startIndex, startIndex + pageSize);
+          return (
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                  {t("scoreByPriority") || "Score by priority"}
+                </p>
+                <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
+                  {["high", "medium", "low"].map((level) => {
+                    const priority = detailMember.byPriority?.[level] || {};
+                    return (
+                      <div
+                        key={level}
+                        className="rounded-xl bg-gray-50 border border-gray-200 p-3 text-center"
+                      >
+                        <div className="text-sm font-semibold text-gray-800 capitalize">
+                          {t(level) || level}
+                        </div>
+                        <div className="mt-1 text-lg font-bold text-gray-900">
+                          {priority.score ?? 0}
+                        </div>
+                        <div className="text-[11px] text-gray-500">
+                          {priority.done ?? 0} {t("tasksDone") || "done"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
+                  <span>
+                    {t("tasksDoneTotal") || "Tasks done / total"}:{" "}
+                    {detailMember.tasks?.done ?? 0}/{detailMember.tasks?.assigned ?? 0}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Input
+                  value={detailSearch}
+                  onChange={(e) => setDetailSearch(e.target.value)}
+                  placeholder={t("searchTasks") || "Search tasks"}
+                />
+                <DatePicker.RangePicker
+                  value={detailDateRange}
+                  onChange={setDetailDateRange}
+                  className="w-full"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Select
+                  value={detailStatus}
+                  onChange={setDetailStatus}
+                  options={[
+                    { value: "all", label: t("all") || "All" },
+                    { value: "done", label: t("done") || "Done" },
+                    { value: "in_progress", label: t("inProgress") || "In Progress" },
+                  ]}
+                />
+                <Select
+                  value={detailPriority}
+                  onChange={setDetailPriority}
+                  options={[
+                    { value: "all", label: t("all") || "All" },
+                    { value: "high", label: t("high") || "High" },
+                    { value: "medium", label: t("medium") || "Medium" },
+                    { value: "low", label: t("low") || "Low" },
+                  ]}
+                />
+                <Select
+                  value={detailSort}
+                  onChange={setDetailSort}
+                  options={[
+                    { value: "recent", label: t("sortRecent") || "Most recent" },
+                    { value: "points", label: t("sortPoints") || "Points" },
+                    { value: "priority", label: t("sortPriority") || "Priority" },
+                  ]}
+                />
+              </div>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="grid grid-cols-12 gap-2 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase text-gray-500">
+                  <span className="col-span-4">{t("task") || "Task"}</span>
+                  <span className="col-span-2">{t("priority") || "Priority"}</span>
+                  <span className="col-span-2">{t("points") || "Points"}</span>
+                  <span className="col-span-2">{t("completedAt") || "Completed at"}</span>
+                  <span className="col-span-2">{t("milestone") || "Milestone"}</span>
+                </div>
+                {pagedTasks.length ? (
+                  pagedTasks.map((task) => (
+                    <div
+                      key={task.taskId}
+                      className="grid grid-cols-12 gap-2 border-t border-gray-100 px-3 py-2 text-sm text-gray-700"
+                    >
+                      <span className="col-span-4 truncate">
+                        {task.title || "Untitled"}
+                      </span>
+                      <span className="col-span-2 text-gray-500 capitalize">
+                        {(task.priority || "--").toLowerCase()}
+                      </span>
+                      <span className="col-span-2 text-gray-500">
+                        {getTaskPoints(task)}
+                      </span>
+                      <span className="col-span-2 text-gray-500">
+                        {getTaskDate(task)
+                          ? dayjs(getTaskDate(task)).format("DD/MM/YYYY")
+                          : "--"}
+                      </span>
+                      <span className="col-span-2 text-gray-500 truncate">
+                        {getTaskMilestone(task)}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-3 py-3 text-sm text-gray-500">
+                    {t("noTasks") || "No tasks"}
+                  </div>
+                )}
+              </div>
+              {filteredTasks.length > pageSize && (
+                <div className="flex justify-end">
+                  <Pagination
+                    current={detailPage}
+                    pageSize={pageSize}
+                    total={filteredTasks.length}
+                    onChange={setDetailPage}
+                    size="small"
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Drawer>
+      </>
     );
   }
 
