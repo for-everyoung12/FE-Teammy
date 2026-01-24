@@ -18,6 +18,7 @@ export default function AIChatBox({
   onClose,
   isMinimized,
   onToggleMinimize,
+  onActionConfirmed,
 }) {
   const [messages, setMessages] = useState([
     {
@@ -135,6 +136,10 @@ export default function AIChatBox({
 
       setMessages((prev) => [...prev, successMessage]);
       setEditingDraft(null);
+      onActionConfirmed?.({
+        actionType: approvedDraft.actionType,
+        actionPayload: approvedDraft.actionPayload,
+      });
 
       notification.success({
         message: t("success") || "Success",

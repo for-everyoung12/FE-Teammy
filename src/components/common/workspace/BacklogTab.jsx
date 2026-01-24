@@ -61,6 +61,7 @@ export default function BacklogTab({
   onPromoteSuccess,
   readOnly = false,
   groupStatus = "",
+  refreshToken = 0,
 }) {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
@@ -105,10 +106,10 @@ export default function BacklogTab({
   }, [columnOptions]);
 
   useEffect(() => {
-    if (!groupId || fetchedRef.current === groupId || isGroupClosed()) return;
+    if (!groupId || isGroupClosed()) return;
     fetchedRef.current = groupId;
     fetchItems();
-  }, [groupId, groupStatus]);
+  }, [groupId, groupStatus, refreshToken]);
 
   const fetchItems = async () => {
     if (!groupId || isGroupClosed()) return;
