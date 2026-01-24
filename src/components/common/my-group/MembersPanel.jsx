@@ -328,7 +328,7 @@ export default function MembersPanel({
               const totalScore = memberStats.reduce(
                 (sum, m) => sum + (Number(m.scoreTotal) || 0),
                 0
-              );
+              );  
               const totalAssigned = memberStats.reduce(
                 (sum, m) => sum + (Number(m.tasks?.assigned) || 0),
                 0
