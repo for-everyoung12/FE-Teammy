@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "../../hook/useTranslation";
 import { useAuth } from "../../context/AuthContext";
@@ -81,6 +81,7 @@ export default function MyGroup() {
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState("kanban");
+  const lastHydratedIdRef = useRef(null);
   const [listFilterStatus, setListFilterStatus] = useState("All");
   const [listViewPage, setListViewPage] = useState(1);
   const [listViewPageSize, setListViewPageSize] = useState(10);
@@ -89,6 +90,8 @@ export default function MyGroup() {
   const [listViewLoading, setListViewLoading] = useState(false);
   const [listViewError, setListViewError] = useState("");
   const [listViewIsServerPaged, setListViewIsServerPaged] = useState(false);
+  const [listViewRefreshToken, setListViewRefreshToken] = useState(0);
+  const [workspaceRefreshToken, setWorkspaceRefreshToken] = useState(0);
   const [pendingInvitations, setPendingInvitations] = useState([]);
   const [pendingLoading, setPendingLoading] = useState(false);
   const [closeGroupModalOpen, setCloseGroupModalOpen] = useState(false);
@@ -381,6 +384,29 @@ export default function MyGroup() {
       comments: task.comments || task.commentResponses || [],
     };
   };
+  const getListTaskId = (task) => task?.id || task?.taskId || task?._id || "";
+  const updateListViewTask = (taskId, changes = {}) => {
+    if (!taskId) return;
+    const normalizedId = String(taskId);
+    setListViewRawTasks((prev) => {
+      if (!Array.isArray(prev) || prev.length === 0) return prev;
+      let updated = false;
+      const next = prev.map((task) => {
+        const currentId = getListTaskId(task);
+        if (!currentId || String(currentId) !== normalizedId) return task;
+        updated = true;
+        const nextTask = { ...task, ...changes };
+        if (changes.status && columnMeta?.[changes.status]) {
+          nextTask.columnId = changes.status;
+        }
+        if (changes.columnId) {
+          nextTask.columnId = changes.columnId;
+        }
+        return nextTask;
+      });
+      return updated ? next : prev;
+    });
+  };
   const parseListResponse = (response) => {
     const payload = response?.data ?? response;
     if (Array.isArray(payload?.columns)) {
@@ -564,6 +590,7 @@ export default function MyGroup() {
     listViewPageSize,
     listFilterStatus,
     listViewFallbackFiltered.length,
+    listViewRefreshToken,
   ]);
 
   const recentActivity = tasks
@@ -819,6 +846,16 @@ export default function MyGroup() {
     const fullTask = taskById.get(task.id);
     setSelectedTask(fullTask || task);
   };
+  const handleUpdateTask = (taskId, changes, options) => {
+    updateListViewTask(taskId, changes);
+    updateTaskFields(taskId, changes, options);
+  };
+  const handleUpdateAssignees = (taskId, userIds) => {
+    updateListViewTask(taskId, {
+      assignees: normalizeAssignees(userIds),
+    });
+    updateTaskAssignees(taskId, userIds);
+  };
   const handleMoveColumnLeft = async (columnId, columnMetaData = {}) => {
     // Lấy danh sách tất cả columns và sắp xếp theo position
     const sortedColumns = Object.entries(columnMeta || {})
@@ -944,6 +981,65 @@ export default function MyGroup() {
     );
     return base;
   }, [isLeader, isReadOnly, t]);
+
+  const handleAIActionConfirmed = useCallback(() => {
+    fetchGroupDetail();
+    refetchBoard({ showLoading: false });
+    setWorkspaceRefreshToken((prev) => prev + 1);
+    if (activeTab === "files") {
+      loadGroupFiles();
+    }
+    if (activeTab === "workspace" && activeWorkspaceTab === "list") {
+      setListViewRefreshToken((prev) => prev + 1);
+    }
+  }, [
+    activeTab,
+    activeWorkspaceTab,
+    fetchGroupDetail,
+    loadGroupFiles,
+    refetchBoard,
+  ]);
+
+  useEffect(() => {
+    if (!id || loading) return;
+    if (lastHydratedIdRef.current === id) return;
+    lastHydratedIdRef.current = id;
+    if (typeof window === "undefined") return;
+    const storedTab = window.localStorage.getItem(`mygroup:tab:${id}`);
+    const storedWorkspaceTab = window.localStorage.getItem(
+      `mygroup:workspaceTab:${id}`,
+    );
+    const allowedTabs = new Set(tabs.map((tab) => tab.key));
+    const workspaceTabs = new Set([
+      "kanban",
+      "list",
+      "backlog",
+      "milestones",
+      "timeline",
+      "reports",
+    ]);
+    const nextTab =
+      storedTab && allowedTabs.has(storedTab) ? storedTab : "overview";
+    const nextWorkspaceTab =
+      storedWorkspaceTab && workspaceTabs.has(storedWorkspaceTab)
+        ? storedWorkspaceTab
+        : "kanban";
+    setActiveTab(nextTab);
+    setActiveWorkspaceTab(nextWorkspaceTab);
+  }, [id, loading, tabs]);
+
+  useEffect(() => {
+    if (!id || typeof window === "undefined") return;
+    window.localStorage.setItem(`mygroup:tab:${id}`, activeTab);
+  }, [activeTab, id]);
+
+  useEffect(() => {
+    if (!id || typeof window === "undefined") return;
+    window.localStorage.setItem(
+      `mygroup:workspaceTab:${id}`,
+      activeWorkspaceTab,
+    );
+  }, [activeWorkspaceTab, id]);
 
   if (loading) {
     return (
@@ -1522,6 +1618,7 @@ export default function MyGroup() {
                     }
                     readOnly={isReadOnly}
                     groupStatus={groupStatus}
+                    refreshToken={workspaceRefreshToken}
                   />
                 )}
 
@@ -1531,6 +1628,7 @@ export default function MyGroup() {
                     groupId={id}
                     readOnly={isReadOnly}
                     groupStatus={groupStatus}
+                    refreshToken={workspaceRefreshToken}
                   />
                 )}
 
@@ -1617,8 +1715,8 @@ export default function MyGroup() {
         columnMeta={columnMeta}
         members={kanbanMembers}
         groupDetail={group}
-        onUpdateTask={isReadOnly ? () => {} : updateTaskFields}
-        onUpdateAssignees={isReadOnly ? () => {} : updateTaskAssignees}
+        onUpdateTask={isReadOnly ? () => {} : handleUpdateTask}
+        onUpdateAssignees={isReadOnly ? () => {} : handleUpdateAssignees}
         onDeleteTask={isReadOnly ? undefined : deleteTask}
         onFetchComments={loadTaskComments}
         onAddComment={isReadOnly ? () => {} : addTaskComment}
@@ -1713,6 +1811,7 @@ export default function MyGroup() {
           onClose={() => setShowAIChat(false)}
           isMinimized={isAIChatMinimized}
           onToggleMinimize={() => setIsAIChatMinimized(!isAIChatMinimized)}
+          onActionConfirmed={handleAIActionConfirmed}
         />
       )}
 

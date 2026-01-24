@@ -7,7 +7,7 @@ const formatStatus = (value = "") =>
     .replace(/\b\w/g, (c) => c.toUpperCase());
 
 const GRID_CLASS =
-  "grid grid-cols-[1.8fr_1.1fr_1fr_1.1fr_1fr_0.8fr] items-center";
+  "grid grid-cols-[1.8fr_1.1fr_1fr_1.1fr_1fr_0.8fr] items-center min-w-0";
 
 const priorityTone = {
   low: "bg-green-50 text-green-700 border-green-100",
@@ -33,6 +33,12 @@ const isDoneStatus = (value) => {
   if (!value) return false;
   const normalized = value.toString().trim().toLowerCase();
   return normalized === "done" || normalized === "completed";
+};
+
+const truncateText = (value = "", maxLength = 0) => {
+  const text = String(value || "").trim();
+  if (!maxLength || text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
 };
 
 export default function ListView({
@@ -103,12 +109,25 @@ export default function ListView({
                   onClick={() => onOpenTask && onOpenTask(task)}
                   className={`${GRID_CLASS} hover:bg-gray-50 focus:bg-gray-50 transition cursor-pointer`}
                 >
-                  <div className="px-4 py-3 space-y-1">
-                    <p className="text-sm font-semibold text-gray-900 truncate">
-                      {task.title || (t?.("untitledTask") || "Untitled task")}
+                  <div className="px-4 py-3 space-y-1 min-w-0">
+                    <p
+                      className="text-sm font-semibold text-gray-900 truncate"
+                      title={task.title || ""}
+                    >
+                      {truncateText(
+                        task.title || (t?.("untitledTask") || "Untitled task"),
+                        80,
+                      )}
                     </p>
-                    <p className="text-xs text-gray-500 truncate">
-                      {task.description || (t?.("noDescription") || "No description")}
+                    <p
+                      className="text-xs text-gray-500 truncate"
+                      title={task.description || ""}
+                    >
+                      {truncateText(
+                        task.description ||
+                          (t?.("noDescription") || "No description"),
+                        140,
+                      )}
                     </p>
                   </div>
 

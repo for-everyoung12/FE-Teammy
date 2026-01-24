@@ -68,7 +68,12 @@ const getOverdueDays = (item) => {
   return Math.max(0, days);
 };
 
-export default function MilestonesTab({ groupId, readOnly = false, groupStatus = "" }) {
+export default function MilestonesTab({
+  groupId,
+  readOnly = false,
+  groupStatus = "",
+  refreshToken = 0,
+}) {
   const { t } = useTranslation();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -144,11 +149,11 @@ export default function MilestonesTab({ groupId, readOnly = false, groupStatus =
   };
 
   useEffect(() => {
-    if (!groupId || fetchedRef.current === groupId || isGroupClosed()) return;
+    if (!groupId || isGroupClosed()) return;
     fetchedRef.current = groupId;
     fetchMilestones();
     fetchBacklogOptions();
-  }, [groupId, groupStatus]);
+  }, [groupId, groupStatus, refreshToken]);
 
   const resetForm = () => {
     setForm({

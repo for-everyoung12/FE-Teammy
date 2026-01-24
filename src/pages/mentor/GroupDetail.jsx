@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Tabs, Breadcrumb, Skeleton, Card, DatePicker, Button, InputNumber } from "antd";
+import { Tabs, Breadcrumb, Skeleton, Card, DatePicker } from "antd";
 import dayjs from "dayjs";
 import { BarChartOutlined, HomeOutlined, FileTextOutlined, TeamOutlined, AppstoreOutlined } from "@ant-design/icons";
 import InfoCard from "../../components/common/my-group/InfoCard";
@@ -31,6 +31,7 @@ export default function GroupDetail() {
   const [groupMembersList, setGroupMembersList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState("kanban");
+  const lastHydratedIdRef = useRef(null);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [closeGroupModalOpen, setCloseGroupModalOpen] = useState(false);
   const [closeGroupLoading, setCloseGroupLoading] = useState(false);
@@ -114,31 +115,59 @@ export default function GroupDetail() {
     });
   }, [fetchContributionScores]);
 
-  const applyScoreFilter = () => {
+  const updateScoreFilter = (nextFrom, nextTo) => {
     const params = {};
-    if (scoreFrom) params.From = scoreFrom.format("YYYY-MM-DD");
-    if (scoreTo) params.To = scoreTo.format("YYYY-MM-DD");
-    if (Number.isFinite(scoreHigh)) params.High = scoreHigh;
-    if (Number.isFinite(scoreMedium)) params.Medium = scoreMedium;
-    if (Number.isFinite(scoreLow)) params.Low = scoreLow;
+    if (nextFrom) params.From = nextFrom.format("YYYY-MM-DD");
+    if (nextTo) params.To = nextTo.format("YYYY-MM-DD");
+    params.High = 5;
+    params.Medium = 3;
+    params.Low = 1;
     fetchContributionScores(params);
   };
 
-  const clearScoreFilter = () => {
-    const today = dayjs();
-    setScoreFrom(today);
-    setScoreTo(today);
-    setScoreHigh(5);
-    setScoreMedium(3);
-    setScoreLow(1);
-    fetchContributionScores({
-      From: today.format("YYYY-MM-DD"),
-      To: today.format("YYYY-MM-DD"),
-      High: 5,
-      Medium: 3,
-      Low: 1,
-    });
-  };
+  useEffect(() => {
+    if (!id || loading) return;
+    if (lastHydratedIdRef.current === id) return;
+    lastHydratedIdRef.current = id;
+    if (typeof window === "undefined") return;
+    const storedTab = window.localStorage.getItem(`mentor-group:tab:${id}`);
+    const storedWorkspaceTab = window.localStorage.getItem(
+      `mentor-group:workspaceTab:${id}`,
+    );
+    const allowedTabs = new Set([
+      "overview",
+      "contributions",
+      "workspace",
+      "feedback",
+    ]);
+    const workspaceTabs = new Set([
+      "kanban",
+      "backlog",
+      "milestones",
+      "reports",
+    ]);
+    const nextTab =
+      storedTab && allowedTabs.has(storedTab) ? storedTab : "overview";
+    const nextWorkspaceTab =
+      storedWorkspaceTab && workspaceTabs.has(storedWorkspaceTab)
+        ? storedWorkspaceTab
+        : "kanban";
+    setActiveTab(nextTab);
+    setActiveWorkspaceTab(nextWorkspaceTab);
+  }, [id, loading]);
+
+  useEffect(() => {
+    if (!id || typeof window === "undefined") return;
+    window.localStorage.setItem(`mentor-group:tab:${id}`, activeTab);
+  }, [activeTab, id]);
+
+  useEffect(() => {
+    if (!id || typeof window === "undefined") return;
+    window.localStorage.setItem(
+      `mentor-group:workspaceTab:${id}`,
+      activeWorkspaceTab,
+    );
+  }, [activeWorkspaceTab, id]);
 
   // Realtime: listen GroupStatusChanged và refetch nếu payload groupId trùng
   useEffect(() => {
@@ -658,89 +687,6 @@ export default function GroupDetail() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-3">
-              <div className="!bg-white !rounded-2xl !border !border-gray-200 !p-5 !mb-4">
-                <p className="!text-sm !font-semibold !text-gray-900 !mb-4">
-                  {t("filters") || "Filters"}
-                </p>
-                <div className="!grid !grid-cols-1 sm:!grid-cols-2 lg:!grid-cols-5 !gap-3">
-                  <div className="!flex !flex-col">
-                    <label className="!text-xs !font-semibold !text-gray-500 !uppercase !mb-1">
-                      {t("from") || "From"}
-                    </label>
-                    <DatePicker
-                      value={scoreFrom}
-                      inputReadOnly
-                      onChange={setScoreFrom}
-                      disabledDate={(current) =>
-                        scoreTo && current && current > scoreTo.endOf("day")
-                      }
-                      className="!w-full"
-                    />
-                  </div>
-                  <div className="!flex !flex-col">
-                    <label className="!text-xs !font-semibold !text-gray-500 !uppercase !mb-1">
-                      {t("to") || "To"}
-                    </label>
-                    <DatePicker
-                      value={scoreTo}
-                      inputReadOnly
-                      onChange={setScoreTo}
-                      disabledDate={(current) =>
-                        scoreFrom && current && current < scoreFrom.startOf("day")
-                      }
-                      className="!w-full"
-                    />
-                  </div>
-                  <div className="!flex !flex-col">
-                    <label className="!text-xs !font-semibold !text-gray-500 !uppercase !mb-1">
-                      {t("high") || "High"}
-                    </label>
-                    <InputNumber
-                      min={0}
-                      value={scoreHigh}
-                      onChange={(value) => setScoreHigh(Number(value || 0))}
-                      className="!w-full"
-                    />
-                  </div>
-                  <div className="!flex !flex-col">
-                    <label className="!text-xs !font-semibold !text-gray-500 !uppercase !mb-1">
-                      {t("medium") || "Medium"}
-                    </label>
-                    <InputNumber
-                      min={0}
-                      value={scoreMedium}
-                      onChange={(value) => setScoreMedium(Number(value || 0))}
-                      className="!w-full"
-                    />
-                  </div>
-                  <div className="!flex !flex-col">
-                    <label className="!text-xs !font-semibold !text-gray-500 !uppercase !mb-1">
-                      {t("low") || "Low"}
-                    </label>
-                    <InputNumber
-                      min={0}
-                      value={scoreLow}
-                      onChange={(value) => setScoreLow(Number(value || 0))}
-                      className="!w-full"
-                    />
-                  </div>
-                </div>
-                <div className="!flex !flex-col sm:!flex-row !gap-3 !mt-4">
-                  <Button
-                    type="primary"
-                    onClick={applyScoreFilter}
-                    className="!flex-1 !h-10 !rounded-lg"
-                  >
-                    {t("execute") || "Execute"}
-                  </Button>
-                  <Button
-                    onClick={clearScoreFilter}
-                    className="!flex-1 !h-10 !rounded-lg"
-                  >
-                    {t("clear") || "Clear"}
-                  </Button>
-                </div>
-              </div>
               <MembersPanel
                 groupMembers={groupMembersList}
                 mentor={mentor}
@@ -754,6 +700,78 @@ export default function GroupDetail() {
                 showStats
                 board={boardForStats}
                 contributionStats={contributionStats}
+                filtersContent={
+                  <div className="!bg-white !rounded-2xl !border !border-gray-200 !p-4 !mb-6">
+                    <div className="!flex !items-center !justify-between !mb-3">
+                      <p className="!text-sm !font-semibold !text-gray-900">
+                        {t("filters") || "Filters"}
+                      </p>
+                    </div>
+                    <div className="!grid !grid-cols-1 lg:!grid-cols-[1.2fr_0.9fr_auto] !items-end !gap-3">
+                      <div className="!grid !grid-cols-1 sm:!grid-cols-2 !gap-3">
+                        <div className="!flex !flex-col">
+                          <label className="!text-[11px] !font-semibold !text-gray-500 !uppercase !mb-1">
+                            {t("from") || "From"}
+                          </label>
+                          <DatePicker
+                            value={scoreFrom}
+                            inputReadOnly
+                            onChange={(value) => {
+                              setScoreFrom(value);
+                              updateScoreFilter(value, scoreTo);
+                            }}
+                            disabledDate={(current) =>
+                              scoreTo &&
+                              current &&
+                              current > scoreTo.endOf("day")
+                            }
+                            className="!w-full"
+                          />
+                        </div>
+                        <div className="!flex !flex-col">
+                          <label className="!text-[11px] !font-semibold !text-gray-500 !uppercase !mb-1">
+                            {t("to") || "To"}
+                          </label>
+                          <DatePicker
+                            value={scoreTo}
+                            inputReadOnly
+                            onChange={(value) => {
+                              setScoreTo(value);
+                              updateScoreFilter(scoreFrom, value);
+                            }}
+                            disabledDate={(current) =>
+                              scoreFrom &&
+                              current &&
+                              current < scoreFrom.startOf("day")
+                            }
+                            className="!w-full"
+                          />
+                        </div>
+                      </div>
+                      <div className="!flex !flex-col !gap-2">
+                        <p className="!text-[11px] !font-semibold !text-gray-500 !uppercase">
+                          {t("priority") || "Priority"}
+                        </p>
+                        <div className="!flex !flex-wrap !gap-2">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-red-50 text-red-700 text-xs font-semibold px-3 py-1">
+                            {t("high") || "High"} {scoreHigh}
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold px-3 py-1">
+                            {t("medium") || "Medium"} {scoreMedium}
+                          </span>
+                          <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1">
+                            {t("low") || "Low"} {scoreLow}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="!flex !items-center !gap-2 !justify-end">
+                        <span className="text-xs text-gray-400">
+                          {t("autoApply") || "Auto apply"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                }
               />
             </div>
           </div>
