@@ -82,6 +82,7 @@ export default function MyGroup() {
   const [activeTab, setActiveTab] = useState("overview");
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState("kanban");
   const lastHydratedIdRef = useRef(null);
+  const lastCloseActionRef = useRef({ action: null, groupId: null, at: 0 });
   const [listFilterStatus, setListFilterStatus] = useState("All");
   const [listViewPage, setListViewPage] = useState(1);
   const [listViewPageSize, setListViewPageSize] = useState(10);
@@ -174,6 +175,18 @@ export default function MyGroup() {
         action === "close_rejected"
       ) {
         fetchGroupDetail();
+        const lastAction = lastCloseActionRef.current;
+        const shouldSuppress =
+          lastAction?.action === action &&
+          String(lastAction?.groupId) === String(payload.groupId) &&
+          Date.now() - (lastAction?.at || 0) < 5000;
+        if (shouldSuppress) return;
+        lastCloseActionRef.current = {
+          action,
+          groupId: payload.groupId,
+          at: Date.now(),
+        };
+
         message.info({
           content:
             action === "close_requested"
@@ -667,6 +680,11 @@ export default function MyGroup() {
     if (!id) return;
     try {
       setCloseGroupLoading(true);
+      lastCloseActionRef.current = {
+        action: "close_requested",
+        groupId: id,
+        at: Date.now(),
+      };
       await GroupService.closeGroup(id);
       message.success(
         t("closeGroupRequested") || "Close group request sent successfully",

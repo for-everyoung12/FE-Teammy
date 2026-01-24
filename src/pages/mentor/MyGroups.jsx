@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, Progress, Button, Skeleton } from "antd";
-import { BookOpen, Target, Calendar } from "lucide-react";
+import { BookOpen, Target, Calendar, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { GroupService } from "../../services/group.service";
 import { ReportService } from "../../services/report.service";
+import { SemesterService } from "../../services/semester.service";
 import { useTranslation } from "../../hook/useTranslation";
 
 export default function MyGroups() {
@@ -12,9 +13,66 @@ export default function MyGroups() {
 
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSemesterId, setSelectedSemesterId] = useState("all");
+  const [semesterOptions, setSemesterOptions] = useState([]);
+  const [filtersLoading, setFiltersLoading] = useState(false);
+  const [searchText, setSearchText] = useState("");
   useEffect(() => {
     fetchMyGroups();
   }, []);
+
+  useEffect(() => {
+    const fetchSemesters = async () => {
+      setFiltersLoading(true);
+      try {
+        const res = await SemesterService.list();
+        const payload = res?.data ?? res;
+        const list = Array.isArray(payload?.data)
+          ? payload.data
+          : Array.isArray(payload)
+          ? payload
+          : payload?.items || [];
+
+        setSemesterOptions(
+          list
+            .map((item) => ({
+              id: item.id || item.semesterId || item._id,
+              label: formatSemesterLabel(item),
+            }))
+            .filter((item) => item.id && item.label),
+        );
+      } catch {
+        setSemesterOptions([]);
+      } finally {
+        setFiltersLoading(false);
+      }
+    };
+
+    fetchSemesters();
+  }, [t]);
+
+  const formatSemesterValue = (value) => {
+    if (!value) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "object") {
+      const season =
+        value.season || value.term || value.name || value.semesterName;
+      const year = value.year || value.academicYear;
+      if (season && year) return `${season} ${year}`;
+      return (
+        season ||
+        year ||
+        value.semesterCode ||
+        value.code ||
+        value.semesterId ||
+        value.id ||
+        ""
+      );
+    }
+    return String(value);
+  };
+  const formatSemesterLabel = (value) =>
+    formatSemesterValue(value) || t("updating") || "Updating";
 
   const fetchMyGroups = async () => {
     try {
@@ -44,6 +102,18 @@ export default function MyGroups() {
     const semesterEnd = g.semester?.endDate
       ? new Date(g.semester.endDate).toLocaleDateString("vi-VN")
       : "N/A";
+    const semesterValue = formatSemesterValue(
+      g.semesterLabel || g.semester || g.semesterName,
+    );
+    const semesterId =
+      g.semesterId ||
+      g.semester?.id ||
+      g.semester?.semesterId ||
+      g.semester?.semester_id ||
+      g.semester?.semesterCode ||
+      g.semester?.code ||
+      semesterValue ||
+      "";
 
     const allMembers = [g.leader, ...(g.members || [])].filter(Boolean);
 
@@ -81,13 +151,50 @@ export default function MyGroups() {
       })),
       deadline: semesterEnd,
       semester: g.semester,
+      semesterId,
+      semesterLabel: formatSemesterLabel(g.semester || semesterValue),
       major: g.major?.majorName || "N/A",
       skills: g.skills || [],
     };
   };
 
   const normalized = groups.map(normalize);
-  const filtered = normalized;
+  const derivedSemesterOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          normalized
+            .map((g) => ({
+              id: g.semesterId,
+              label: g.semesterLabel,
+            }))
+            .filter((item) => item.id && item.label)
+            .map((item) => [String(item.id), item]),
+        ).values(),
+      ),
+    [normalized],
+  );
+  const semesterOptionsToShow =
+    semesterOptions.length > 0 ? semesterOptions : derivedSemesterOptions;
+  const filtered = normalized.filter((group) => {
+    if (selectedSemesterId !== "all") {
+      if (String(group.semesterId) !== String(selectedSemesterId)) return false;
+    }
+    const query = (searchText || "").trim().toLowerCase();
+    if (!query) return true;
+    const name = (group.name || "").toLowerCase();
+    const topic = (group.topic || "").toLowerCase();
+    const description = (group.description || "").toLowerCase();
+    const major = (group.major || "").toLowerCase();
+    const semester = (group.semesterLabel || "").toLowerCase();
+    return (
+      name.includes(query) ||
+      topic.includes(query) ||
+      description.includes(query) ||
+      major.includes(query) ||
+      semester.includes(query)
+    );
+  });
 
   return (
     <div className="min-h-screen pb-20">
@@ -99,6 +206,36 @@ export default function MyGroups() {
           {t("manageAndTrackGroups") ||
             "Quản lý và theo dõi các nhóm dự án bạn đang hướng dẫn"}
         </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+          <div className="flex items-center gap-2 flex-1 min-w-[220px] px-3 py-2 rounded-lg border border-gray-200 bg-white">
+            <Search className="w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              className="w-full bg-transparent outline-none text-sm text-gray-700"
+              placeholder={t("searchGroups") || "Search groups..."}
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
+          </div>
+          <label className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {t("semester") || "Semester"}
+            </span>
+            <select
+              value={selectedSemesterId}
+              onChange={(e) => setSelectedSemesterId(e.target.value)}
+              disabled={filtersLoading}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+            >
+              <option value="all">{t("all") || "All"}</option>
+              {semesterOptionsToShow.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {/* ---------------------------------- */}

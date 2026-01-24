@@ -14,6 +14,7 @@ const MyTopics = () => {
   const [searchText, setSearchText] = useState("");
   const [selectedSemesterId, setSelectedSemesterId] = useState("all");
   const [selectedMajorId, setSelectedMajorId] = useState("all");
+  const [selectedStatus, setSelectedStatus] = useState("all");
   const [semesterOptions, setSemesterOptions] = useState([]);
   const [majorOptions, setMajorOptions] = useState([]);
   const [filtersLoading, setFiltersLoading] = useState(false);
@@ -179,12 +180,25 @@ const MyTopics = () => {
     const query = (searchText || "").trim().toLowerCase();
     const semesterFilter = selectedSemesterId || "all";
     const majorIdFilter = selectedMajorId || "all";
+    const statusFilter = selectedStatus || "all";
     return mappedTopics.filter((topic) => {
       if (semesterFilter !== "all") {
         if (String(topic.semesterId) !== String(semesterFilter)) return false;
       }
       if (majorIdFilter !== "all") {
         if (String(topic.majorId) !== String(majorIdFilter)) return false;
+      }
+      if (statusFilter !== "all") {
+        const rawStatus = (topic.status || "").toString().trim().toLowerCase();
+        const normalizedStatus = rawStatus.replace(/[\s_-]+/g, "");
+        const statusKey = normalizedStatus.includes("block")
+          ? "block"
+          : normalizedStatus.includes("close")
+          ? "closed"
+          : normalizedStatus.includes("open")
+          ? "open"
+          : normalizedStatus || "open";
+        if (statusKey !== statusFilter) return false;
       }
       if (!query) return true;
       const title = (topic.title || "").toLowerCase();
@@ -202,7 +216,7 @@ const MyTopics = () => {
         skills.includes(query)
       );
     });
-  }, [mappedTopics, searchText, selectedMajorId, selectedSemesterId]);
+  }, [mappedTopics, searchText, selectedMajorId, selectedSemesterId, selectedStatus]);
 
   const handleViewTopicDetail = useCallback(async (topic) => {
     if (!topic?.topicId) return;
@@ -294,6 +308,21 @@ const MyTopics = () => {
                       {opt.label}
                     </option>
                   ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  {t("status") || "Status"}
+                </span>
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
+                >
+                  <option value="all">{t("all") || "All"}</option>
+                  <option value="open">{t("open") || "Open"}</option>
+                  <option value="closed">{t("closed") || "Closed"}</option>
+                  <option value="block">{t("blocked") || t("block") || "Block"}</option>
                 </select>
               </label>
             </div>
