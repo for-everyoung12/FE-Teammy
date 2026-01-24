@@ -8,6 +8,7 @@ const { TextArea } = Input;
 export default function FeedbackCard({ feedback, isLeader, isMentor, onUpdateStatus, onEdit, onDelete, groupId }) {
   const { t } = useTranslation();
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [statusSubmitting, setStatusSubmitting] = useState(false);
   const [form] = Form.useForm();
   const [kebabMenuOpen, setKebabMenuOpen] = useState(false);
 
@@ -16,7 +17,7 @@ export default function FeedbackCard({ feedback, isLeader, isMentor, onUpdateSta
     const statusLower = (status || "").toLowerCase();
     // Map valid statuses
     if (statusLower === "submitted") {
-      return "submitted";
+      return "acknowledged";
     }
     if (statusLower === "acknowledged" || statusLower === "đã xác nhận") {
       return "acknowledged";
@@ -129,9 +130,14 @@ export default function FeedbackCard({ feedback, isLeader, isMentor, onUpdateSta
         console.error("Available keys:", Object.keys(feedback || {}));
         return;
       }
-      await onUpdateStatus(feedbackId, values);
-      setStatusModalOpen(false);
-      form.resetFields();
+      try {
+        setStatusSubmitting(true);
+        await onUpdateStatus(feedbackId, values);
+        setStatusModalOpen(false);
+        form.resetFields();
+      } finally {
+        setStatusSubmitting(false);
+      }
     }
   };
 
@@ -334,6 +340,7 @@ export default function FeedbackCard({ feedback, isLeader, isMentor, onUpdateSta
         title={t("updateFeedbackStatus") || "Update Feedback Status"}
         open={statusModalOpen}
         onCancel={() => {
+          if (statusSubmitting) return;
           setStatusModalOpen(false);
           form.resetFields();
         }}
@@ -367,14 +374,20 @@ export default function FeedbackCard({ feedback, isLeader, isMentor, onUpdateSta
           </Form.Item>
           <Form.Item>
             <div className="flex justify-end gap-2">
-              <Button onClick={() => {
-                setStatusModalOpen(false);
-                form.resetFields();
-              }}>
+              <Button
+                onClick={() => {
+                  if (statusSubmitting) return;
+                  setStatusModalOpen(false);
+                  form.resetFields();
+                }}
+                disabled={statusSubmitting}
+              >
                 {t("cancel") || "Cancel"}
               </Button>
-              <Button type="primary" htmlType="submit">
-                {t("update") || "Update"}
+              <Button type="primary" htmlType="submit" loading={statusSubmitting}>
+                {statusSubmitting
+                  ? t("updatingFeedback") || "Updating..."
+                  : t("update") || "Update"}
               </Button>
             </div>
           </Form.Item>
