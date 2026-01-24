@@ -85,7 +85,7 @@ export default function SendFeedbackModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:items-center"
       role="dialog"
       aria-modal="true"
       onClick={handleBackdrop}
@@ -93,7 +93,7 @@ export default function SendFeedbackModal({
       <div className="absolute inset-0 bg-black/40" />
       <form
         onSubmit={handleSubmit}
-        className="relative z-10 w-full max-w-2xl rounded-2xl bg-white shadow-xl"
+        className="relative z-10 w-full max-w-2xl max-h-[90vh] rounded-2xl bg-white shadow-xl flex flex-col"
       >
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
@@ -116,7 +116,7 @@ export default function SendFeedbackModal({
           </button>
         </div>
 
-        <div className="px-6 py-4 space-y-4">
+        <div className="px-6 py-4 space-y-4 flex-1 overflow-y-auto">
           <Form form={form} layout="vertical">
             <Form.Item
               name="summary"

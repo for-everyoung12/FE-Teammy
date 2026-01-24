@@ -32,6 +32,7 @@ export default function GroupDetail() {
   const [loading, setLoading] = useState(false);
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState("kanban");
   const lastHydratedIdRef = useRef(null);
+  const lastCloseActionRef = useRef({ action: null, groupId: null, at: 0 });
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [closeGroupModalOpen, setCloseGroupModalOpen] = useState(false);
   const [closeGroupLoading, setCloseGroupLoading] = useState(false);
@@ -183,6 +184,18 @@ export default function GroupDetail() {
         action === "close_rejected"
       ) {
         fetchGroupDetail();
+        const lastAction = lastCloseActionRef.current;
+        const shouldSuppress =
+          lastAction?.action === action &&
+          String(lastAction?.groupId) === String(payload.groupId) &&
+          Date.now() - (lastAction?.at || 0) < 5000;
+        if (shouldSuppress) return;
+        lastCloseActionRef.current = {
+          action,
+          groupId: payload.groupId,
+          at: Date.now(),
+        };
+
         message.info(
           action === "close_requested"
             ? t("closeGroupRequested") || "Close group requested"
@@ -330,6 +343,11 @@ export default function GroupDetail() {
     if (!id) return;
     try {
       setCloseGroupLoading(true);
+      lastCloseActionRef.current = {
+        action: "close_confirmed",
+        groupId: id,
+        at: Date.now(),
+      };
       await GroupService.confirmCloseGroup(id);
       message.success(t("closeGroupConfirmed") || "Group close request confirmed successfully");
       setCloseGroupModalOpen(false);
@@ -350,6 +368,11 @@ export default function GroupDetail() {
     if (!id) return;
     try {
       setCloseGroupLoading(true);
+      lastCloseActionRef.current = {
+        action: "close_rejected",
+        groupId: id,
+        at: Date.now(),
+      };
       await GroupService.rejectCloseGroup(id);
       message.success(t("closeGroupRejected") || "Group close request rejected successfully");
       setCloseGroupModalOpen(false);

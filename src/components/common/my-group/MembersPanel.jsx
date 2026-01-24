@@ -175,9 +175,24 @@ export default function MembersPanel({
     );
   };
 
+  const normalizeTaskStatus = (value) => {
+    if (!value) return "";
+    const normalized = value
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, "_");
+    if (["to_do", "todo"].includes(normalized)) return "todo";
+    if (["in_progress", "inprogress"].includes(normalized)) return "in_progress";
+    if (["done", "completed", "closed"].includes(normalized)) return "done";
+    return normalized;
+  };
+
   const getTaskStatus = (task) => {
-    const status = (task?.status || "").toLowerCase();
-    if (status) return status;
+    const rawStatus =
+      task?.status || task?.columnId || task?.state || task?.columnName || "";
+    const normalized = normalizeTaskStatus(rawStatus);
+    if (normalized) return normalized;
     if (task?.completedAt || task?.doneAt) return "done";
     return "in_progress";
   };
@@ -523,29 +538,6 @@ export default function MembersPanel({
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-xs text-gray-500">
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                    <span>{t("deliveryScore") || "Delivery"}</span>
-                    <span className="ml-auto text-gray-700 font-medium">
-                      {member.deliveryScore ?? 0}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span>{t("qualityScore") || "Quality"}</span>
-                    <span className="ml-auto text-gray-700 font-medium">
-                      {member.qualityScore ?? 0}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                    <span>{t("collabScore") || "Collab"}</span>
-                    <span className="ml-auto text-gray-700 font-medium">
-                      {member.collabScore ?? 0}
-                    </span>
-                  </div>
-                </div>
                 <button
                   type="button"
                   onClick={() => openDetails(member)}
@@ -578,6 +570,42 @@ export default function MembersPanel({
       >
         {detailMember && (() => {
           const tasks = detailMember.taskDetails || [];
+          const statusOptions = Array.from(
+            new Map(
+              tasks
+                .map((task) => {
+                  const rawStatus =
+                    task?.columnName ||
+                    task?.status ||
+                    task?.columnId ||
+                    task?.state ||
+                    "";
+                  const normalized = normalizeTaskStatus(rawStatus);
+                  if (!normalized) return null;
+                  const label = (() => {
+                    if (normalized === "in_progress") {
+                      return t("inProgress") || "In Progress";
+                    }
+                    if (normalized === "done") {
+                      return t("done") || "Done";
+                    }
+                    if (normalized === "todo") {
+                      return t("todo") || "Todo";
+                    }
+                    return rawStatus
+                      ? rawStatus
+                          .toString()
+                          .replace(/[_-]+/g, " ")
+                          .replace(/\b\w/g, (c) => c.toUpperCase())
+                      : normalized
+                          .replace(/[_-]+/g, " ")
+                          .replace(/\b\w/g, (c) => c.toUpperCase());
+                  })();
+                  return [normalized, { value: normalized, label }];
+                })
+                .filter(Boolean),
+            ).values(),
+          );
           const filteredTasks = filterTasks(tasks, {
             search: detailSearch,
             status: detailStatus,
@@ -640,8 +668,15 @@ export default function MembersPanel({
                   onChange={setDetailStatus}
                   options={[
                     { value: "all", label: t("all") || "All" },
-                    { value: "done", label: t("done") || "Done" },
-                    { value: "in_progress", label: t("inProgress") || "In Progress" },
+                    ...(statusOptions.length
+                      ? statusOptions
+                      : [
+                          { value: "done", label: t("done") || "Done" },
+                          {
+                            value: "in_progress",
+                            label: t("inProgress") || "In Progress",
+                          },
+                        ]),
                   ]}
                 />
                 <Select
@@ -665,18 +700,16 @@ export default function MembersPanel({
                 />
               </div>
               <div className="rounded-lg border border-gray-200 overflow-hidden">
-                <div className="grid grid-cols-12 gap-2 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase text-gray-500">
+                <div className="grid grid-cols-8 gap-2 bg-gray-50 px-3 py-2 text-[11px] font-semibold uppercase text-gray-500">
                   <span className="col-span-4">{t("task") || "Task"}</span>
                   <span className="col-span-2">{t("priority") || "Priority"}</span>
-                  <span className="col-span-2">{t("points") || "Points"}</span>
                   <span className="col-span-2">{t("completedAt") || "Completed at"}</span>
-                  <span className="col-span-2">{t("milestone") || "Milestone"}</span>
                 </div>
                 {pagedTasks.length ? (
                   pagedTasks.map((task) => (
                     <div
                       key={task.taskId}
-                      className="grid grid-cols-12 gap-2 border-t border-gray-100 px-3 py-2 text-sm text-gray-700"
+                      className="grid grid-cols-8 gap-2 border-t border-gray-100 px-3 py-2 text-sm text-gray-700"
                     >
                       <span className="col-span-4 truncate">
                         {task.title || "Untitled"}
@@ -685,15 +718,9 @@ export default function MembersPanel({
                         {(task.priority || "--").toLowerCase()}
                       </span>
                       <span className="col-span-2 text-gray-500">
-                        {getTaskPoints(task)}
-                      </span>
-                      <span className="col-span-2 text-gray-500">
                         {getTaskDate(task)
                           ? dayjs(getTaskDate(task)).format("DD/MM/YYYY")
                           : "--"}
-                      </span>
-                      <span className="col-span-2 text-gray-500 truncate">
-                        {getTaskMilestone(task)}
                       </span>
                     </div>
                   ))
