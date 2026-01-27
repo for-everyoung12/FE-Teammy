@@ -87,7 +87,55 @@ export const AuthProvider = ({ children }) => {
         ? error
         : new HttpException(
             "Failed to login with Google",
-            HTTP_STATUS.INTERNALSERVER_ERROR
+            HTTP_STATUS.INTERNALSERVER_ERROR,
+          );
+    }
+  };
+
+  const loginWithEmail = async (email, password) => {
+    try {
+      const response = await AuthService.loginWithEmail({ email, password });
+
+      const token = response.data?.accessToken || response.data?.token;
+      if (!token) {
+        throw new Error("Invalid login response");
+      }
+
+      const user = await handleLogin(token);
+
+      return user;
+    } catch (error) {
+      throw error instanceof HttpException
+        ? error
+        : new HttpException(
+            "Failed to login with email",
+            HTTP_STATUS.INTERNALSERVER_ERROR,
+          );
+    }
+  };
+
+  const register = async (email, password, displayName) => {
+    try {
+      const response = await AuthService.register({
+        email,
+        password,
+        displayName,
+      });
+
+      const token = response.data?.accessToken || response.data?.token;
+      if (!token) {
+        throw new Error("Invalid registration response");
+      }
+
+      const user = await handleLogin(token);
+
+      return user;
+    } catch (error) {
+      throw error instanceof HttpException
+        ? error
+        : new HttpException(
+            "Failed to register",
+            HTTP_STATUS.INTERNALSERVER_ERROR,
           );
     }
   };
@@ -135,7 +183,7 @@ export const AuthProvider = ({ children }) => {
         ? error
         : new HttpException(
             "Failed to get user info",
-            HTTP_STATUS.INTERNALSERVER_ERROR
+            HTTP_STATUS.INTERNALSERVER_ERROR,
           );
     }
   };
@@ -158,7 +206,7 @@ export const AuthProvider = ({ children }) => {
     connectGroupStatusHub(token)
       .then(() => {
         console.log(
-          "[AuthContext] GroupStatus hub connected (rehydrated token)"
+          "[AuthContext] GroupStatus hub connected (rehydrated token)",
         );
       })
       .catch((err) => {
@@ -180,6 +228,8 @@ export const AuthProvider = ({ children }) => {
         handleLogin,
         logout,
         loginGoogle,
+        loginWithEmail,
+        register,
         notifications,
         setNotifications,
         unreadCount,
@@ -196,7 +246,7 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new HttpException(
       "useAuth must be used within an AuthProvider",
-      HTTP_STATUS.INTERNALSERVER_ERROR
+      HTTP_STATUS.INTERNALSERVER_ERROR,
     );
   }
   return context;
