@@ -17,6 +17,13 @@ export const AuthService = {
       isLoading: true,
     });
   },
+  loginWithUsername({ username, password } = {}) {
+    return BaseService.post({
+      url: API.AUTH.LOGIN_USERNAME,
+      payload: { username, password },
+      isLoading: true,
+    });
+  },
   register({ email, password, displayName } = {}) {
     return BaseService.post({
       url: API.AUTH.REGISTER,

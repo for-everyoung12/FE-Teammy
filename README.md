@@ -49,6 +49,18 @@ VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
 VITE_DOMAIN_ADMIN=your_api_base_url
 ```
 
+## Tài khoản demo (cho nhà tuyển dụng dùng thử)
+```json
+{
+  "Users": [
+    { "role": "student",   "username": "dev-student",   "password": "dev123" },
+    { "role": "mentor",    "username": "dev-mentor",    "password": "dev123" },
+    { "role": "moderator", "username": "dev-moderator", "password": "dev123" },
+    { "role": "admin",     "username": "dev-admin",     "password": "dev123" }
+  ]
+}
+```
+
 ## Cấu trúc thư mục (rút gọn)
 ```
 src/
