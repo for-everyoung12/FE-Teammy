@@ -4,6 +4,8 @@ export const API = {
   },
   AUTH: {
     LOGIN: "/auth/login",
+    LOGIN_EMAIL: "/auth/login/email",
+    REGISTER: "/auth/register",
     ME: "/auth/me",
   },
   ADMIN: {
