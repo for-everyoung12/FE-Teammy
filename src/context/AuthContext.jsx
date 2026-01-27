@@ -114,6 +114,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const loginWithUsername = async (username, password) => {
+    try {
+      const response = await AuthService.loginWithUsername({
+        username,
+        password,
+      });
+
+      const token = response.data?.accessToken || response.data?.token;
+      if (!token) {
+        throw new Error("Invalid login response");
+      }
+
+      const user = await handleLogin(token);
+
+      return user;
+    } catch (error) {
+      throw error instanceof HttpException
+        ? error
+        : new HttpException(
+            "Failed to login with username",
+            HTTP_STATUS.INTERNALSERVER_ERROR,
+          );
+    }
+  };
+
   const register = async (email, password, displayName) => {
     try {
       const response = await AuthService.register({
@@ -229,6 +254,7 @@ export const AuthProvider = ({ children }) => {
         logout,
         loginGoogle,
         loginWithEmail,
+        loginWithUsername,
         register,
         notifications,
         setNotifications,

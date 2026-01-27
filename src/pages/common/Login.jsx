@@ -7,12 +7,12 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "../../hook/useTranslation";
 
 const Login = () => {
-  const { loginGoogle, loginWithEmail, token, userInfo, role } = useAuth();
+  const { loginGoogle, loginWithUsername, token, userInfo, role } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [loading, setLoading] = React.useState(false);
   const [formData, setFormData] = React.useState({
-    email: "",
+    username: "",
     password: "",
   });
   const [errors, setErrors] = React.useState({});
@@ -89,10 +89,8 @@ const Login = () => {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = "Email is invalid";
+    if (!formData.username.trim()) {
+      newErrors.username = "Username is required";
     }
 
     if (!formData.password) {
@@ -105,13 +103,16 @@ const Login = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleEmailLogin = async (e) => {
+  const handleUsernameLogin = async (e) => {
     e.preventDefault();
     if (loading || !validateForm()) return;
     setLoading(true);
 
     try {
-      const userData = await loginWithEmail(formData.email, formData.password);
+      const userData = await loginWithUsername(
+        formData.username,
+        formData.password,
+      );
 
       notification.success({ message: "Đăng nhập thành công!" });
 
@@ -208,23 +209,23 @@ const Login = () => {
         </div>
 
         {/* Email/Password Form */}
-        <form onSubmit={handleEmailLogin} className="space-y-4">
+        <form onSubmit={handleUsernameLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Email
+              Username
             </label>
             <input
-              type="email"
-              name="email"
-              value={formData.email}
+              type="text"
+              name="username"
+              value={formData.username}
               onChange={handleInputChange}
               className={`w-full px-4 py-3 rounded-xl border-2 ${
-                errors.email ? "border-red-400" : "border-gray-200"
+                errors.username ? "border-red-400" : "border-gray-200"
               } focus:border-indigo-400 focus:outline-none transition-colors`}
-              placeholder="your.email@example.com"
+              placeholder="your.username"
             />
-            {errors.email && (
-              <p className="mt-1 text-xs text-red-500">{errors.email}</p>
+            {errors.username && (
+              <p className="mt-1 text-xs text-red-500">{errors.username}</p>
             )}
           </div>
 
