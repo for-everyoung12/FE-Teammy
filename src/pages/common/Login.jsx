@@ -7,10 +7,15 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "../../hook/useTranslation";
 
 const Login = () => {
-  const { loginGoogle, token, userInfo, role } = useAuth();
+  const { loginGoogle, loginWithEmail, token, userInfo, role } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [loading, setLoading] = React.useState(false);
+  const [formData, setFormData] = React.useState({
+    email: "",
+    password: "",
+  });
+  const [errors, setErrors] = React.useState({});
 
   // If already authenticated, keep user on the app instead of showing login again
   useEffect(() => {
@@ -81,6 +86,73 @@ const Login = () => {
     }
   };
 
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = "Email is invalid";
+    }
+
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < 6) {
+      newErrors.password = "Password must be at least 6 characters";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    if (loading || !validateForm()) return;
+    setLoading(true);
+
+    try {
+      const userData = await loginWithEmail(formData.email, formData.password);
+
+      notification.success({ message: "Đăng nhập thành công!" });
+
+      let userRole = userData?.role;
+      if (Array.isArray(userRole)) userRole = userRole[0];
+      userRole = String(userRole || "")
+        .toLowerCase()
+        .replace(/^role[_-]?/i, "");
+
+      switch (userRole) {
+        case "admin":
+          navigate("/admin/dashboard");
+          break;
+        case "mentor":
+          navigate("/mentor/dashboard");
+          break;
+        case "moderator":
+          navigate("/moderator/dashboard");
+          break;
+        default:
+          navigate("/");
+      }
+    } catch (error) {
+      notification.error({
+        message: "Đăng nhập thất bại",
+        description: error?.message || "Vui lòng thử lại",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    // Clear error when user starts typing
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex flex-col items-center justify-center px-4 py-12 relative overflow-hidden">
       {/* Animated Background Decorations */}
@@ -108,7 +180,7 @@ const Login = () => {
             Welcome back
           </h1>
           <p className="text-gray-600 text-base font-medium">
-            Sign in with your Google account to access Teammy
+            Sign in to your account to access Teammy
           </p>
         </div>
 
@@ -132,6 +204,90 @@ const Login = () => {
               <span className="font-semibold text-gray-500">Campus:</span>{" "}
               <span className="font-bold text-gray-900">FU-Hồ Chí Minh</span>
             </div>
+          </div>
+        </div>
+
+        {/* Email/Password Form */}
+        <form onSubmit={handleEmailLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              className={`w-full px-4 py-3 rounded-xl border-2 ${
+                errors.email ? "border-red-400" : "border-gray-200"
+              } focus:border-indigo-400 focus:outline-none transition-colors`}
+              placeholder="your.email@example.com"
+            />
+            {errors.email && (
+              <p className="mt-1 text-xs text-red-500">{errors.email}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleInputChange}
+              className={`w-full px-4 py-3 rounded-xl border-2 ${
+                errors.password ? "border-red-400" : "border-gray-200"
+              } focus:border-indigo-400 focus:outline-none transition-colors`}
+              placeholder="Enter your password"
+            />
+            {errors.password && (
+              <p className="mt-1 text-xs text-red-500">{errors.password}</p>
+            )}
+          </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-2xl py-4 px-6 font-bold hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Signing in...
+              </span>
+            ) : (
+              <span>Sign In</span>
+            )}
+          </button>
+        </form>
+
+        {/* Divider */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-4 bg-white/80 text-gray-500 font-medium">
+              Or continue with
+            </span>
           </div>
         </div>
 
@@ -165,31 +321,7 @@ const Login = () => {
                 />
               </svg>
             </div>
-            <span className="text-base font-bold">
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                      fill="none"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Signing in...
-                </span>
-              ) : (
-                "Continue with Google"
-              )}
-            </span>
+            <span className="text-base font-bold">Continue with Google</span>
           </div>
         </button>
 
